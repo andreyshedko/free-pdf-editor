@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Cross-platform desktop PDF editor built with Electron, React, and TypeScript.",
-  "main": "electron/main.js",
+  "main": "electron/dist/main.js",
   "scripts": {
     "dev": "concurrently -n electron,renderer -c blue,green \"npm:dev:electron\" \"npm:dev:renderer\"",
-    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "dev:electron": "npm run build:electron && cross-env NODE_ENV=development electron .",
     "dev:renderer": "vite --config vite.config.ts",
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build --config vite.config.ts",
