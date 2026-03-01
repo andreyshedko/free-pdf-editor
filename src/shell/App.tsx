@@ -21,10 +21,10 @@ export const App: React.FC = () => {
   const [showSecurityPanel, setShowSecurityPanel] = useState(false);
   const [showOCRPanel, setShowOCRPanel] = useState(false);
 
-  const handleOpenPdf = async () => {
+  const handleOpenPdf = useCallback(async () => {
     const opened = await window.electronAPI?.openPdf?.();
     if (opened) setDocument({ data: opened.data, name: opened.name });
-  };
+  }, [setDocument]);
 
   const handleExport = useCallback(async () => {
     if (!fileData) return;
