@@ -2,13 +2,18 @@
 
 Cross-platform desktop PDF editor built with **Electron**, **React**, and **TypeScript**.
 
-This is an early foundation focusing on:
+Key features:
 
-- Electron shell (Windows & macOS ready)
+- Electron shell (Windows, macOS, and Linux)
 - React + Vite renderer
 - Zustand state store
-- Modular architecture for viewer / editor / annotations / OCR / export / security
-- PDF.js integration for rendering (single-page for now)
+- PDF.js multi-page rendering with virtualized scroll
+- Fabric.js annotation overlay: freehand draw, highlight, shapes, text comments
+- Signature drawing panel
+- OCR via Tesseract.js (runs fully offline)
+- Page management: delete and reorder pages
+- Export / Save PDF via pdf-lib
+- Security panel (save with optional password – encryption coming)
 
 ## Getting started
 
@@ -22,31 +27,41 @@ This starts:
 - Vite dev server for the React renderer
 - Electron shell pointing at `http://localhost:5173`
 
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl/Cmd+O` | Open PDF |
+| `Ctrl/Cmd+S` | Export / Save PDF |
+| `Ctrl/Cmd+=` | Zoom in |
+| `Ctrl/Cmd+-` | Zoom out |
+| `Esc` | Deselect tool / close panels |
+
 ## High-level architecture
 
 - `electron/` – Electron main & preload processes, native file dialogs, IPC entrypoints
 - `src/` – React renderer
-  - `shell/` – App chrome & layout
-  - `modules/viewer/` – PDF viewing UI (thumbnails, main viewer, right inspector)
-  - `core/pdf/` – PDF.js / pdf-lib integration (rendering, parsing, export)
-  - `store/` – Zustand stores for document, annotations, UI state
+  - `shell/` – App chrome & layout (`App.tsx`)
+  - `modules/viewer/` – PDF viewing UI: thumbnails pane, multi-page viewer, right inspector, annotation overlay, OCR panel, signature panel, security panel
+  - `modules/editor/` – Text & image editing stub (pdf-lib, in progress)
+  - `modules/forms/` – Form filling & creation stub (in progress)
+  - `core/pdf/` – PDF.js rendering service, pdf-lib export service, Tesseract.js OCR service
+  - `store/` – Zustand stores for document state, annotations, page management
 
-Planned modules (stubs to be added):
+## Planned / in-progress
 
-- `modules/editor/` – Text & image editing (pdf-lib)
-- `modules/annotations/` – Fabric.js overlay: highlights, shapes, comments
-- `modules/pages/` – Page add/delete/reorder
+- `modules/editor/` – Text & image editing via pdf-lib
 - `modules/forms/` – Form filling & creation
-- `modules/signatures/` – Drawing, uploaded certificates
-- `modules/ocr/` – Tesseract.js integration
-- `modules/export/` – Optimized export & conversion
-- `modules/security/` – Encryption, permissions, redaction
+- Password encryption in the security panel
+- Embedding captured signatures into the PDF
+- Drag-and-drop page reordering in the thumbnails pane
 
 ## Next steps
 
-- Wire the `Open PDF` action to the store and viewer
-- Add lazy multi-page rendering (virtualized scroll)
-- Add Fabric.js overlay for annotation tools
-- Introduce module shells for editor, OCR, export, security
-- Add tests for core pdf services and viewer components
+- Implement text / image editing layer (pdf-lib)
+- Add form field detection and filling
+- Wire password encryption into the export pipeline
+- Embed signature images as PDF annotations
+- Add drag-and-drop reordering to the thumbnails pane
+- Add tests for viewer components (thumbnails, annotation overlay)
 
