@@ -3,23 +3,27 @@ import { PdfWorkspace } from '@modules/viewer/PdfWorkspace';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
 import { useAnnotationStore } from '@store/annotationStore';
 import { usePageManagementStore } from '@store/pageManagementStore';
-import { exportPdf, reorderPages } from '@core/pdf/exportService';
+import { exportPdf, reorderPages, embedSignature } from '@core/pdf/exportService';
 import { SignaturePanel } from '@modules/viewer/SignaturePanel';
 import { SecurityPanel } from '@modules/viewer/SecurityPanel';
 import { OCRPanel } from '@modules/viewer/OCRPanel';
+import { EditorPanel } from '@modules/editor/EditorPanel';
+import { FormsPanel } from '@modules/forms/FormsPanel';
 
 export const App: React.FC = () => {
   const setDocument = usePdfDocumentStore((s) => s.setDocument);
   const zoom = usePdfDocumentStore((s) => s.zoom);
   const setZoom = usePdfDocumentStore((s) => s.setZoom);
   const setViewMode = usePdfDocumentStore((s) => s.setViewMode);
-  const { fileData, currentFileName } = usePdfDocumentStore();
+  const { fileData, currentFileName, currentPageIndex, updateFileData } = usePdfDocumentStore();
   const { activeTool, setTool, currentColor, setColor, strokeWidth, setStrokeWidth } = useAnnotationStore();
   const { pageOrder } = usePageManagementStore();
 
   const [showSignaturePanel, setShowSignaturePanel] = useState(false);
   const [showSecurityPanel, setShowSecurityPanel] = useState(false);
   const [showOCRPanel, setShowOCRPanel] = useState(false);
+  const [showEditorPanel, setShowEditorPanel] = useState(false);
+  const [showFormsPanel, setShowFormsPanel] = useState(false);
 
   const handleOpenPdf = useCallback(async () => {
     const opened = await window.electronAPI?.openPdf?.();
@@ -48,6 +52,24 @@ export const App: React.FC = () => {
     }
   }, [fileData, pageOrder, currentFileName]);
 
+  const handleSignatureConfirm = useCallback(async (dataUrl: string) => {
+    if (!fileData) return;
+    try {
+      const actualPage =
+        pageOrder.length > 0 ? (pageOrder[currentPageIndex] ?? currentPageIndex) : currentPageIndex;
+      const newBytes = await embedSignature(fileData, actualPage, dataUrl);
+      updateFileData(
+        newBytes.buffer.slice(
+          newBytes.byteOffset,
+          newBytes.byteOffset + newBytes.byteLength,
+        ) as ArrayBuffer,
+      );
+      setShowSignaturePanel(false);
+    } catch (e) {
+      window.alert('Failed to embed signature: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [fileData, currentPageIndex, pageOrder, updateFileData]);
+
   // Keyboard shortcut handler
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -68,6 +90,8 @@ export const App: React.FC = () => {
         setShowSignaturePanel(false);
         setShowSecurityPanel(false);
         setShowOCRPanel(false);
+        setShowEditorPanel(false);
+        setShowFormsPanel(false);
       }
     };
     window.addEventListener('keydown', handler);
@@ -197,6 +221,17 @@ export const App: React.FC = () => {
           </label>
         </div>
 
+        <div className="toolbar-group" aria-label="Edit tools">
+          <button className="btn btn-ghost" onClick={() => setShowEditorPanel(true)} disabled={!fileData} title="Insert text">
+            <span className="btn-icon">🖊</span>
+            Edit Text
+          </button>
+          <button className="btn btn-ghost" onClick={() => setShowFormsPanel(true)} disabled={!fileData} title="Fill form fields">
+            <span className="btn-icon">📋</span>
+            Forms
+          </button>
+        </div>
+
         <div className="toolbar-group" aria-label="Export and security">
           <button className="btn btn-ghost" onClick={handleExport} disabled={!fileData}>
             <span className="btn-icon">⬇</span>
@@ -219,17 +254,13 @@ export const App: React.FC = () => {
       {showSignaturePanel && (
         <SignaturePanel
           onClose={() => setShowSignaturePanel(false)}
-          onConfirm={(dataUrl) => {
-            // TODO: embed signature image into annotation overlay
-            console.log('Signature captured:', dataUrl.substring(0, 50));
-            window.alert(
-              'Your signature was captured, but adding it to the PDF is not yet supported in this version.'
-            );
-          }}
+          onConfirm={handleSignatureConfirm}
         />
       )}
       {showSecurityPanel && <SecurityPanel onClose={() => setShowSecurityPanel(false)} />}
       {showOCRPanel && <OCRPanel onClose={() => setShowOCRPanel(false)} />}
+      {showEditorPanel && <EditorPanel onClose={() => setShowEditorPanel(false)} />}
+      {showFormsPanel && <FormsPanel onClose={() => setShowFormsPanel(false)} />}
     </div>
   );
 };

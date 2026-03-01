@@ -6,15 +6,27 @@ const THUMB_SCALE = 0.2;
 interface PdfThumbnailProps {
   fileData: ArrayBuffer;
   pageNumber: number;
+  pageIndex: number;
   isActive: boolean;
+  isDragOver: boolean;
   onClick: () => void;
+  onDragStart: (index: number) => void;
+  onDragOver: (e: React.DragEvent, index: number) => void;
+  onDrop: (index: number) => void;
+  onDragEnd: () => void;
 }
 
 export const PdfThumbnail: React.FC<PdfThumbnailProps> = ({
   fileData,
   pageNumber,
+  pageIndex,
   isActive,
-  onClick
+  isDragOver,
+  onClick,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -55,16 +67,23 @@ export const PdfThumbnail: React.FC<PdfThumbnailProps> = ({
   }, [fileData, pageNumber]);
 
   return (
-    <button
-      type="button"
-      className={`thumb-card ${isActive ? 'active' : ''}`}
+    <div
+      role="button"
+      tabIndex={0}
+      draggable
+      className={`thumb-card ${isActive ? 'active' : ''} ${isDragOver ? 'drag-over' : ''}`}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
+      onDragStart={() => onDragStart(pageIndex)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(e, pageIndex); }}
+      onDrop={(e) => { e.preventDefault(); onDrop(pageIndex); }}
+      onDragEnd={onDragEnd}
       aria-label={`Page ${pageNumber}`}
     >
       <div className="thumb-number">Page {pageNumber}</div>
       <div className="thumb-preview">
         <canvas ref={canvasRef} />
       </div>
-    </button>
+    </div>
   );
 };
