@@ -93,3 +93,13 @@ electron_1.ipcMain.handle('fs:openPdfDialog', async () => {
         data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
     };
 });
+electron_1.ipcMain.handle('fs:savePdfDialog', async (_event, data, defaultName) => {
+    const { canceled, filePath } = await electron_1.dialog.showSaveDialog({
+        defaultPath: defaultName,
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+    });
+    if (canceled || !filePath)
+        return false;
+    await fs.promises.writeFile(filePath, Buffer.from(data));
+    return true;
+});

@@ -9,6 +9,9 @@ export interface OpenedPdf {
 const api = {
   openPdf: async (): Promise<OpenedPdf | null> => {
     return ipcRenderer.invoke('fs:openPdfDialog');
+  },
+  savePdf: async (data: ArrayBuffer, name: string): Promise<boolean> => {
+    return ipcRenderer.invoke('fs:savePdfDialog', data, name);
   }
 };
 

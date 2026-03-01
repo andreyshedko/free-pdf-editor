@@ -4,6 +4,7 @@ export interface ElectronAPI {
     name: string;
     data: ArrayBuffer;
   } | null>;
+  savePdf?: (data: ArrayBuffer, name: string) => Promise<boolean>;
 }
 
 declare global {

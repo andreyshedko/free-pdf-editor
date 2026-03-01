@@ -559,3 +559,75 @@ body {
   }
 }
 
+
+/* Shared modal overlay for Signature, Security, and OCR panels */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-panel {
+  background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.99), rgba(17, 24, 39, 0.99));
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  border-radius: 1rem;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.95);
+  width: 440px;
+  max-width: 95vw;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.signature-canvas {
+  display: block;
+  margin: 0.5rem auto;
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  border-radius: 0.5rem;
+  cursor: crosshair;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(31, 41, 55, 0.9);
+}
+
+.text-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  background: rgba(15, 23, 42, 0.9);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: rgba(79, 70, 229, 0.8);
+}
+
+/* Annotation overlay container – wraps Fabric's canvas pair */
+.page-annotation-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
