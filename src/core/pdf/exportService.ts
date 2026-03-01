@@ -4,11 +4,9 @@ import { PDFDocument } from 'pdf-lib';
  * Given raw PDF bytes, returns saved PDF bytes.
  * Note: password encryption is not yet implemented; the password parameter is reserved for future use.
  */
-export async function exportPdf(sourceBytes: ArrayBuffer, password?: string): Promise<Uint8Array> {
+export async function exportPdf(sourceBytes: ArrayBuffer, _password?: string): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
   const saveOptions: Parameters<typeof pdfDoc.save>[0] = {};
-  // password parameter is accepted for future encryption support
-  void password;
   return pdfDoc.save(saveOptions);
 }
 

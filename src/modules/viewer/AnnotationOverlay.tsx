@@ -8,6 +8,8 @@ interface AnnotationOverlayProps {
   height: number;
 }
 
+const HIGHLIGHT_WIDTH_MULTIPLIER = 8;
+
 export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({ pageIndex, width, height }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
@@ -88,7 +90,7 @@ export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({ pageIndex,
         fc.isDrawingMode = true;
         const hBrush = new fabric.PencilBrush(fc);
         hBrush.color = currentColor;
-        hBrush.width = strokeWidth * 8;
+        hBrush.width = strokeWidth * HIGHLIGHT_WIDTH_MULTIPLIER;
         fc.freeDrawingBrush = hBrush;
         break;
       }
