@@ -221,6 +221,9 @@ export const App: React.FC = () => {
           onConfirm={(dataUrl) => {
             // TODO: embed signature image into annotation overlay
             console.log('Signature captured:', dataUrl.substring(0, 50));
+            window.alert(
+              'Your signature was captured, but adding it to the PDF is not yet supported in this version.'
+            );
           }}
         />
       )}
