@@ -36,9 +36,9 @@ export const OCRPanel: React.FC<OCRPanelProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="signature-panel-overlay">
-      <div className="signature-panel" style={{ width: 500, maxHeight: '80vh' }}>
-        <div className="signature-panel-header">
+    <div className="modal-overlay">
+      <div className="modal-panel" style={{ width: 500, maxHeight: '80vh' }}>
+        <div className="modal-header">
           <span>🔍 OCR – Extract Text</span>
           <button className="btn btn-ghost" onClick={onClose}>✕</button>
         </div>
@@ -55,9 +55,13 @@ export const OCRPanel: React.FC<OCRPanelProps> = ({ onClose }) => {
             />
           )}
         </div>
-        <div className="signature-panel-actions">
+        <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
-          <button className="btn btn-strong" onClick={runOCR} disabled={loading || !fileData}>
+          <button
+            className="btn btn-strong"
+            onClick={runOCR}
+            disabled={loading || !fileData || currentPageIndex < 0}
+          >
             {loading ? 'Running…' : 'Run OCR on current page'}
           </button>
         </div>

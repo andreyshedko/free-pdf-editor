@@ -560,8 +560,8 @@ body {
 }
 
 
-/* Signature & Security & OCR panels */
-.signature-panel-overlay {
+/* Shared modal overlay for Signature, Security, and OCR panels */
+.modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.7);
@@ -572,7 +572,7 @@ body {
   backdrop-filter: blur(4px);
 }
 
-.signature-panel {
+.modal-panel {
   background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.99), rgba(17, 24, 39, 0.99));
   border: 1px solid rgba(55, 65, 81, 0.9);
   border-radius: 1rem;
@@ -582,7 +582,7 @@ body {
   overflow: hidden;
 }
 
-.signature-panel-header {
+.modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -601,7 +601,7 @@ body {
   cursor: crosshair;
 }
 
-.signature-panel-actions {
+.modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
@@ -624,7 +624,7 @@ body {
   border-color: rgba(79, 70, 229, 0.8);
 }
 
-/* Annotation overlay canvas */
+/* Annotation overlay container – wraps Fabric's canvas pair */
 .page-annotation-layer {
   position: absolute;
   top: 0;

@@ -29,12 +29,13 @@ export const App: React.FC = () => {
   const handleExport = useCallback(async () => {
     if (!fileData) return;
     try {
-      let bytes: Uint8Array;
-      if (pageOrder.length > 0) {
-        bytes = await reorderPages(fileData, pageOrder);
-      } else {
-        bytes = await exportPdf(fileData);
-      }
+      // Only invoke the more expensive reorderPages when the order genuinely differs
+      // from the original sequential order (i.e. pages were deleted or reordered).
+      const isOrderModified =
+        pageOrder.length > 0 && !pageOrder.every((v, i) => v === i);
+      const bytes = isOrderModified
+        ? await reorderPages(fileData, pageOrder)
+        : await exportPdf(fileData);
       const blob = new Blob([bytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -71,7 +72,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [zoom, setZoom, setTool, handleExport]);
+  }, [zoom, setZoom, setTool, handleOpenPdf, handleExport]);
 
   const isToolActive = (tool: string) => activeTool === tool;
 

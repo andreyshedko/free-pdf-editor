@@ -17,3 +17,15 @@ export async function recognizeCanvas(canvas: HTMLCanvasElement): Promise<string
   const { data: { text } } = await worker.recognize(canvas);
   return text;
 }
+
+/**
+ * Terminate the background Tesseract worker and release its memory.
+ * Call this when OCR is no longer needed (e.g. on app unload).
+ */
+export async function terminateWorker(): Promise<void> {
+  if (workerPromise) {
+    const worker = await workerPromise;
+    await worker.terminate();
+    workerPromise = null;
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
 import { usePageManagementStore } from '@store/pageManagementStore';
 import { getOrLoadPdfDocument } from '@core/pdf/pdfjsService';
@@ -15,7 +15,7 @@ const PdfSinglePage: React.FC<{
   pageIndex: number;
   scale: number;
   onDimensionsKnown: (dims: PageDimensions) => void;
-}> = ({ fileData, pageNumber, pageIndex, scale, onDimensionsKnown }) => {
+}> = memo(({ fileData, pageNumber, pageIndex, scale, onDimensionsKnown }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dims, setDims] = useState<PageDimensions | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +38,7 @@ const PdfSinglePage: React.FC<{
         canvas.height = viewport.height * dpr;
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
+        ctx.scale(dpr, dpr);
         const d = { width: viewport.width, height: viewport.height };
         setDims(d);
         onDimensionsKnown(d);
@@ -70,7 +71,7 @@ const PdfSinglePage: React.FC<{
       )}
     </div>
   );
-};
+});
 
 export const PdfPageViewer: React.FC = () => {
   const { fileData, pageCount, setPageCount, setCurrentPageIndex, setDocument, zoom } = usePdfDocumentStore();

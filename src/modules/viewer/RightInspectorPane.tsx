@@ -4,9 +4,18 @@ import { usePageManagementStore } from '@store/pageManagementStore';
 import { useAnnotationStore } from '@store/annotationStore';
 
 export const RightInspectorPane: React.FC = () => {
-  const { pageCount, currentPageIndex, currentFileName } = usePdfDocumentStore();
+  const { pageCount, currentPageIndex, currentFileName, setCurrentPageIndex } = usePdfDocumentStore();
   const { pageOrder, deletePage } = usePageManagementStore();
   const { activeTool } = useAnnotationStore();
+
+  const handleDeleteCurrentPage = () => {
+    const newLength = pageOrder.length - 1;
+    deletePage(currentPageIndex);
+    // Clamp currentPageIndex so it stays within the new page list bounds
+    if (newLength > 0 && currentPageIndex >= newLength) {
+      setCurrentPageIndex(newLength - 1);
+    }
+  };
 
   return (
     <div className="right-panel-scroll">
@@ -39,7 +48,7 @@ export const RightInspectorPane: React.FC = () => {
             <button
               className="btn btn-ghost"
               style={{ fontSize: '0.7rem', color: 'var(--danger)' }}
-              onClick={() => deletePage(currentPageIndex)}
+              onClick={handleDeleteCurrentPage}
             >
               🗑 Delete current page
             </button>

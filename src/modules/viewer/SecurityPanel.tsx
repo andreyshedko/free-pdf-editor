@@ -15,7 +15,7 @@ export const SecurityPanel: React.FC<SecurityPanelProps> = ({ onClose }) => {
     if (!fileData) return;
     setStatus('Saving...');
     try {
-      const bytes = await exportPdf(fileData, password || undefined);
+      const bytes = await exportPdf(fileData);
       const blob = new Blob([bytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -30,14 +30,16 @@ export const SecurityPanel: React.FC<SecurityPanelProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="signature-panel-overlay">
-      <div className="signature-panel">
-        <div className="signature-panel-header">
-          <span>🔒 Protect PDF</span>
+    <div className="modal-overlay">
+      <div className="modal-panel">
+        <div className="modal-header">
+          <span>🔒 Save PDF</span>
           <button className="btn btn-ghost" onClick={onClose}>✕</button>
         </div>
         <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Password (leave empty to save without encryption)</label>
+          <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            Password (optional)
+          </label>
           <input
             type="password"
             className="text-input"
@@ -45,9 +47,18 @@ export const SecurityPanel: React.FC<SecurityPanelProps> = ({ onClose }) => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          {status && <span style={{ fontSize: '0.75rem', color: status.startsWith('Error') ? 'var(--danger)' : '#22c55e' }}>{status}</span>}
+          {password && (
+            <span style={{ fontSize: '0.75rem', color: '#fbbf24' }}>
+              ⚠️ Password encryption is not yet implemented. The file will be saved without encryption.
+            </span>
+          )}
+          {status && (
+            <span style={{ fontSize: '0.75rem', color: status.startsWith('Error') ? 'var(--danger)' : '#22c55e' }}>
+              {status}
+            </span>
+          )}
         </div>
-        <div className="signature-panel-actions">
+        <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-strong" onClick={handleProtect}>Save PDF</button>
         </div>
