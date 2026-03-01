@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { usePageManagementStore } from '../store/pageManagementStore';
+import { usePageManagementStore } from './pageManagementStore';
 
 describe('pageManagementStore', () => {
   beforeEach(() => {
