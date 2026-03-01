@@ -10,6 +10,7 @@ export interface PdfDocumentState {
   zoom: number;
   viewMode: ViewMode;
   setDocument: (opts: { data: ArrayBuffer; name: string }) => void;
+  updateFileData: (data: ArrayBuffer) => void;
   setPageCount: (count: number) => void;
   setCurrentPageIndex: (index: number) => void;
   setZoom: (zoom: number) => void;
@@ -32,6 +33,7 @@ export const usePdfDocumentStore = create<PdfDocumentState>((set) => ({
       zoom: 100,
       viewMode: 'fit-width'
     }),
+  updateFileData: (data: ArrayBuffer) => set({ fileData: data, pageCount: null }),
   setPageCount: (count: number) =>
     set((state) => ({
       pageCount: state.pageCount ?? count

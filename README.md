@@ -7,13 +7,15 @@ Key features:
 - Electron shell (Windows, macOS, and Linux)
 - React + Vite renderer
 - Zustand state store
-- PDF.js multi-page rendering with virtualized scroll
+- PDF.js multi-page rendering with continuous scroll (no virtualization yet)
 - Fabric.js annotation overlay: freehand draw, highlight, shapes, text comments
-- Signature drawing panel
+- Signature drawing and embedding into PDF (bottom-right of current page)
 - OCR via Tesseract.js (runs fully offline)
-- Page management: delete and reorder pages
+- Page management: delete pages and reorder via drag-and-drop in the thumbnails pane
+- Text insertion via pdf-lib (Helvetica, configurable position/size/color)
+- PDF form field detection and filling (AcroForm text fields, checkboxes, dropdowns)
 - Export / Save PDF via pdf-lib
-- Security panel (save with optional password – encryption coming)
+- Security panel (save PDF; password encryption requires a library beyond pdf-lib v1)
 
 ## Getting started
 
@@ -42,26 +44,21 @@ This starts:
 - `electron/` – Electron main & preload processes, native file dialogs, IPC entrypoints
 - `src/` – React renderer
   - `shell/` – App chrome & layout (`App.tsx`)
-  - `modules/viewer/` – PDF viewing UI: thumbnails pane, multi-page viewer, right inspector, annotation overlay, OCR panel, signature panel, security panel
-  - `modules/editor/` – Text & image editing stub (pdf-lib, in progress)
-  - `modules/forms/` – Form filling & creation stub (in progress)
-  - `core/pdf/` – PDF.js rendering service, pdf-lib export service, Tesseract.js OCR service
+  - `modules/viewer/` – PDF viewing UI: thumbnails pane with drag-to-reorder, multi-page viewer, right inspector, annotation overlay, OCR panel, signature panel, security panel
+  - `modules/editor/` – Text insertion panel and service (`EditorPanel`, `editorService`)
+  - `modules/forms/` – Form field filling panel and service (`FormsPanel`, `formsService`)
+  - `core/pdf/` – PDF.js rendering service, pdf-lib export/edit/signature service, Tesseract.js OCR service
   - `store/` – Zustand stores for document state, annotations, page management
 
 ## Planned / in-progress
 
-- `modules/editor/` – Text & image editing via pdf-lib
-- `modules/forms/` – Form filling & creation
-- Password encryption in the security panel
-- Embedding captured signatures into the PDF
-- Drag-and-drop page reordering in the thumbnails pane
+- PDF password encryption (pdf-lib v1 does not support writing encrypted PDFs; a different library is needed)
+- Image insertion into pages (groundwork exists via `pdfDoc.embedPng`)
+- Virtualized scroll for very large documents
 
 ## Next steps
 
-- Implement text / image editing layer (pdf-lib)
-- Add form field detection and filling
-- Wire password encryption into the export pipeline
-- Embed signature images as PDF annotations
-- Add drag-and-drop reordering to the thumbnails pane
 - Add tests for viewer components (thumbnails, annotation overlay)
+- Add image insertion panel alongside the text editor
+- Implement PDF password encryption with a suitable library
 
