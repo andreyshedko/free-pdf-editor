@@ -1,69 +1,113 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
+import { usePageManagementStore } from '@store/pageManagementStore';
 import { getOrLoadPdfDocument } from '@core/pdf/pdfjsService';
+import { AnnotationOverlay } from './AnnotationOverlay';
 
-export const PdfPageViewer: React.FC = () => {
-  const { fileData, currentPageIndex, pageCount, setPageCount, setDocument } = usePdfDocumentStore();
-  const containerRef = useRef<HTMLDivElement | null>(null);
+interface PageDimensions {
+  width: number;
+  height: number;
+}
+
+const PdfSinglePage: React.FC<{
+  fileData: ArrayBuffer;
+  pageNumber: number;
+  pageIndex: number;
+  scale: number;
+  onDimensionsKnown: (dims: PageDimensions) => void;
+}> = ({ fileData, pageNumber, pageIndex, scale, onDimensionsKnown }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dims, setDims] = useState<PageDimensions | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!fileData || currentPageIndex < 0) {
-      if (containerRef.current) {
-        containerRef.current.innerHTML = '';
-      }
-      return;
-    }
-
     let cancelled = false;
-
     const render = async () => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      container.innerHTML = '';
-
-      const pdf = await getOrLoadPdfDocument(fileData);
-      if (cancelled) return;
-
-      if (!pageCount) {
-        setPageCount(pdf.numPages);
+      try {
+        const pdf = await getOrLoadPdfDocument(fileData);
+        if (cancelled) return;
+        const page = await pdf.getPage(pageNumber);
+        if (cancelled) return;
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = viewport.width * dpr;
+        canvas.height = viewport.height * dpr;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        const d = { width: viewport.width, height: viewport.height };
+        setDims(d);
+        onDimensionsKnown(d);
+        await page.render({ canvasContext: ctx, viewport } as any).promise;
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Render error');
       }
-
-      const page = await pdf.getPage(currentPageIndex + 1);
-      if (cancelled) return;
-
-      const viewport = page.getViewport({ scale: 1.2 });
-      const wrapper = document.createElement('div');
-      wrapper.className = 'page-wrapper';
-
-      const canvas = document.createElement('canvas');
-      canvas.className = 'page-canvas';
-      const context = canvas.getContext('2d');
-      if (!context) return;
-
-      const outputScale = window.devicePixelRatio || 1;
-      canvas.width = viewport.width * outputScale;
-      canvas.height = viewport.height * outputScale;
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
-
-      const renderContext = {
-        canvasContext: context,
-        viewport
-      } as any;
-
-      wrapper.appendChild(canvas);
-      container.appendChild(wrapper);
-
-      await page.render(renderContext).promise;
     };
-
     void render();
+    return () => { cancelled = true; };
+  }, [fileData, pageNumber, scale, onDimensionsKnown]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [fileData, currentPageIndex, pageCount, setPageCount]);
+  if (error) {
+    return (
+      <div className="page-wrapper page-error" style={{ minHeight: 120 }}>
+        <span className="muted">Page {pageNumber}: {error}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-wrapper" style={{ position: 'relative' }}>
+      <canvas ref={canvasRef} className="page-canvas" />
+      {dims && (
+        <AnnotationOverlay
+          pageIndex={pageIndex}
+          width={dims.width}
+          height={dims.height}
+        />
+      )}
+    </div>
+  );
+};
+
+export const PdfPageViewer: React.FC = () => {
+  const { fileData, pageCount, setPageCount, setCurrentPageIndex, setDocument, zoom } = usePdfDocumentStore();
+  const { pageOrder, initPages } = usePageManagementStore();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  const scale = zoom / 100;
+
+  useEffect(() => {
+    if (fileData) {
+      getOrLoadPdfDocument(fileData).then((pdf) => {
+        setPageCount(pdf.numPages);
+        initPages(pdf.numPages);
+      }).catch(() => {/* ignore */});
+    }
+  }, [fileData, setPageCount, initPages]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !pageCount) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const idx = Number((entry.target as HTMLElement).dataset.pageIndex ?? -1);
+            if (idx >= 0) setCurrentPageIndex(idx);
+          }
+        });
+      },
+      { root: container, threshold: 0.5 }
+    );
+    pageRefs.current.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [pageCount, setCurrentPageIndex]);
+
+  const handleDims = useCallback(() => {/* no-op */}, []);
 
   if (!fileData) {
     return (
@@ -92,14 +136,31 @@ export const PdfPageViewer: React.FC = () => {
             <span className="btn-icon">＋</span>
             Open PDF
           </button>
-          <button className="btn btn-ghost">
-            <span className="btn-icon">💡</span>
-            See roadmap
-          </button>
         </div>
       </div>
     );
   }
 
-  return <div ref={containerRef} className="viewer-scroll" aria-label="Current PDF page" />;
+  const pages = pageOrder.length > 0 ? pageOrder : (pageCount ? Array.from({ length: pageCount }, (_, i) => i) : []);
+
+  return (
+    <div ref={containerRef} className="viewer-scroll" aria-label="PDF pages">
+      {pages.map((origIndex, listIndex) => (
+        <div
+          key={`${origIndex}-${listIndex}`}
+          data-page-index={listIndex}
+          ref={(el) => { if (el) pageRefs.current.set(listIndex, el); else pageRefs.current.delete(listIndex); }}
+          className="page-holder"
+        >
+          <PdfSinglePage
+            fileData={fileData}
+            pageNumber={origIndex + 1}
+            pageIndex={listIndex}
+            scale={scale}
+            onDimensionsKnown={handleDims}
+          />
+        </div>
+      ))}
+    </div>
+  );
 };

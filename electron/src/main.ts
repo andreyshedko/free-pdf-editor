@@ -70,3 +70,13 @@ ipcMain.handle('fs:openPdfDialog', async () => {
   };
 });
 
+ipcMain.handle('fs:savePdfDialog', async (_event, data: ArrayBuffer, defaultName: string) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    defaultPath: defaultName,
+    filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+  });
+  if (canceled || !filePath) return false;
+  await fs.promises.writeFile(filePath, Buffer.from(data));
+  return true;
+});
+
