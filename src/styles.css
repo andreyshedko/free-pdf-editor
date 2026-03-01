@@ -308,8 +308,13 @@ body {
   background: #f9fafb;
 }
 
-.page-wrapper.page-error {
+.page-wrapper.page-placeholder {
   min-height: 120px;
+  background: radial-gradient(circle at 30% 20%, rgba(79, 70, 229, 0.06), rgba(15, 23, 42, 0.9));
+  border: 1px dashed rgba(55, 65, 81, 0.5);
+}
+
+
   display: flex;
   align-items: center;
   justify-content: center;

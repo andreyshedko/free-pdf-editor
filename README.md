@@ -7,7 +7,7 @@ Key features:
 - Electron shell (Windows, macOS, and Linux)
 - React + Vite renderer
 - Zustand state store
-- PDF.js multi-page rendering with continuous scroll (no virtualization yet)
+- PDF.js multi-page rendering with virtualized scroll (only visible and nearby pages are rendered; placeholders maintain scroll position for the rest)
 - Fabric.js annotation overlay: freehand draw, highlight, shapes, text comments
 - Signature drawing and embedding into PDF (bottom-right of current page)
 - OCR via Tesseract.js (runs fully offline)
@@ -54,7 +54,6 @@ This starts:
 
 - PDF password encryption (pdf-lib v1 does not support writing encrypted PDFs; a different library is needed)
 - Image insertion into pages (groundwork exists via `pdfDoc.embedPng`)
-- Virtualized scroll for very large documents
 
 ## Next steps
 
