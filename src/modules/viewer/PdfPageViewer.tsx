@@ -103,4 +103,3 @@ export const PdfPageViewer: React.FC = () => {
 
   return <div ref={containerRef} className="viewer-scroll" aria-label="Current PDF page" />;
 };
-

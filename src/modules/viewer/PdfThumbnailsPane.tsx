@@ -1,10 +1,11 @@
 import React from 'react';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
+import { PdfThumbnail } from './PdfThumbnail';
 
 export const PdfThumbnailsPane: React.FC = () => {
-  const { pageCount, currentPageIndex } = usePdfDocumentStore();
+  const { fileData, pageCount, currentPageIndex, setCurrentPageIndex } = usePdfDocumentStore();
 
-  if (!pageCount) {
+  if (!fileData || !pageCount) {
     return (
       <div className="thumbs-scroll empty-state">
         <div className="empty-orbit" aria-hidden="true">
@@ -24,14 +25,14 @@ export const PdfThumbnailsPane: React.FC = () => {
   return (
     <div className="thumbs-scroll">
       {Array.from({ length: pageCount }, (_, i) => (
-        <button key={i} className={`thumb-card ${i === currentPageIndex ? 'active' : ''}`}>
-          <div className="thumb-number">Page {i + 1}</div>
-          <div className="thumb-preview">
-            <span className="muted">Preview</span>
-          </div>
-        </button>
+        <PdfThumbnail
+          key={i}
+          fileData={fileData}
+          pageNumber={i + 1}
+          isActive={i === currentPageIndex}
+          onClick={() => setCurrentPageIndex(i)}
+        />
       ))}
     </div>
   );
 };
-
