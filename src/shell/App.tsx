@@ -1,6 +1,7 @@
 import React from 'react';
 import { PdfWorkspace } from '@modules/viewer/PdfWorkspace';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
+import { SystemStatus } from '@core/SystemStatus';
 
 export const App: React.FC = () => {
   const setDocument = usePdfDocumentStore((s) => s.setDocument);
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
           <span className="pill">Desktop · Offline · Secure</span>
         </div>
         <div className="top-bar-right">
+          <SystemStatus />
           <span className="badge-subtle" aria-label="AI tools status">
             <span className="badge-dot" />
             AI tools ready
