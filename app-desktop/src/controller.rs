@@ -357,8 +357,7 @@ impl AppController {
             let w = rendered.width;
             let h = rendered.height;
             let data = rendered.data.clone();
-            // rendered borrow ends here so we can use self.window below
-            drop(rendered);
+            let _ = rendered; // end borrow so we can use self.window below
 
             let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(w, h);
             buf.make_mut_bytes().copy_from_slice(&data);

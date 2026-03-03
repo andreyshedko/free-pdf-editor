@@ -331,3 +331,105 @@ impl Document {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    /// Build a minimal valid single-page PDF using lopdf and save to a temp file.
+    fn minimal_pdf() -> NamedTempFile {
+        let mut doc = LopdfDoc::with_version("1.7");
+
+        let pages_id = doc.new_object_id();
+        let page_id = doc.new_object_id();
+
+        let content_stream = Stream::new(dictionary! {}, b"BT /F1 12 Tf 100 700 Td (Hello, world!) Tj ET".to_vec());
+        let content_id = doc.add_object(content_stream);
+
+        let page = lopdf::Object::Dictionary(dictionary! {
+            "Type"      => Object::Name(b"Page".to_vec()),
+            "Parent"    => Object::Reference(pages_id),
+            "MediaBox"  => Object::Array(vec![
+                Object::Integer(0), Object::Integer(0),
+                Object::Integer(595), Object::Integer(842),
+            ]),
+            "Contents"  => Object::Reference(content_id),
+        });
+        doc.objects.insert(page_id, page);
+
+        let pages = lopdf::Object::Dictionary(dictionary! {
+            "Type"  => Object::Name(b"Pages".to_vec()),
+            "Kids"  => Object::Array(vec![Object::Reference(page_id)]),
+            "Count" => Object::Integer(1),
+        });
+        doc.objects.insert(pages_id, pages);
+
+        let catalog_id = doc.add_object(dictionary! {
+            "Type"  => Object::Name(b"Catalog".to_vec()),
+            "Pages" => Object::Reference(pages_id),
+        });
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+
+        let mut f = NamedTempFile::new().expect("temp file");
+        doc.save_to(f.as_file_mut()).expect("save");
+        f
+    }
+
+    #[test]
+    fn open_returns_correct_page_count() {
+        let f = minimal_pdf();
+        let doc = Document::open(f.path()).expect("open");
+        assert_eq!(doc.page_count(), 1);
+    }
+
+    #[test]
+    fn open_nonexistent_returns_error() {
+        let result = Document::open("/no/such/file.pdf");
+        assert!(matches!(result, Err(PdfCoreError::Open(_))));
+    }
+
+    #[test]
+    fn get_page_out_of_range_returns_error() {
+        let f = minimal_pdf();
+        let doc = Document::open(f.path()).expect("open");
+        assert!(matches!(doc.get_page(99), Err(PdfCoreError::PageOutOfRange(99))));
+    }
+
+    #[test]
+    fn get_page_returns_media_box() {
+        let f = minimal_pdf();
+        let doc = Document::open(f.path()).expect("open");
+        let page = doc.get_page(0).expect("get page");
+        assert!(page.media_box.width > 0.0);
+        assert!(page.media_box.height > 0.0);
+    }
+
+    #[test]
+    fn delete_page_reduces_count() {
+        let f = minimal_pdf();
+        let mut doc = Document::open(f.path()).expect("open");
+        assert_eq!(doc.page_count(), 1);
+        doc.delete_page(0).expect("delete");
+        assert_eq!(doc.page_count(), 0);
+    }
+
+    #[test]
+    fn delete_page_out_of_range_returns_error() {
+        let f = minimal_pdf();
+        let mut doc = Document::open(f.path()).expect("open");
+        assert!(matches!(doc.delete_page(5), Err(PdfCoreError::PageOutOfRange(5))));
+    }
+
+    #[test]
+    fn save_to_roundtrip() {
+        let f = minimal_pdf();
+        let mut doc = Document::open(f.path()).expect("open");
+        let out = tempfile::NamedTempFile::new().expect("out temp");
+        doc.save_to(out.path()).expect("save");
+        let doc2 = Document::open(out.path()).expect("re-open");
+        assert_eq!(doc2.page_count(), 1);
+    }
+}
