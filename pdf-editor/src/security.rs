@@ -21,7 +21,13 @@ impl DocumentCommand for SetPasswordCommand {
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         self.snapshot = Some(buf.into_inner());
         // Note: lopdf 0.39 does not expose a direct encrypt API.
-        // Password protection is recorded here for future backend integration.
+        // Password protection requires a PDF library with encryption support.
+        if !self.password.is_empty() {
+            tracing::warn!(
+                "password protection requested but lopdf 0.39 does not support \
+                 encryption; document will not be encrypted"
+            );
+        }
         tracing::info!("password set (placeholder - lopdf encryption not available in 0.39)");
         Ok(())
     }

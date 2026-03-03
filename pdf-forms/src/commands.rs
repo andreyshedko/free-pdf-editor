@@ -87,3 +87,100 @@ impl DocumentCommand for SetFieldValueCommand {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::detector::detect_form_fields;
+    use crate::types::FormFieldKind;
+    use lopdf::{dictionary, Document as LopdfDoc, Object};
+    use pdf_core::Document;
+    
+    use tempfile::NamedTempFile;
+
+    /// Build a minimal PDF with one AcroForm text field named "Name".
+    fn pdf_with_text_field() -> NamedTempFile {
+        let mut doc = LopdfDoc::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let page_id = doc.new_object_id();
+
+        // The form field object
+        let field_id = doc.add_object(Object::Dictionary(dictionary! {
+            "Type"  => Object::Name(b"Annot".to_vec()),
+            "FT"    => Object::Name(b"Tx".to_vec()),
+            "T"     => Object::string_literal("Name"),
+            "V"     => Object::string_literal(""),
+            "Rect"  => Object::Array(vec![
+                Object::Integer(100), Object::Integer(700),
+                Object::Integer(300), Object::Integer(720),
+            ]),
+        }));
+
+        let page = Object::Dictionary(dictionary! {
+            "Type"     => Object::Name(b"Page".to_vec()),
+            "Parent"   => Object::Reference(pages_id),
+            "MediaBox" => Object::Array(vec![
+                Object::Integer(0), Object::Integer(0),
+                Object::Integer(595), Object::Integer(842),
+            ]),
+        });
+        doc.objects.insert(page_id, page);
+
+        let pages = Object::Dictionary(dictionary! {
+            "Type"  => Object::Name(b"Pages".to_vec()),
+            "Kids"  => Object::Array(vec![Object::Reference(page_id)]),
+            "Count" => Object::Integer(1),
+        });
+        doc.objects.insert(pages_id, pages);
+
+        let acroform_id = doc.add_object(Object::Dictionary(dictionary! {
+            "Fields" => Object::Array(vec![Object::Reference(field_id)]),
+        }));
+
+        let catalog_id = doc.add_object(dictionary! {
+            "Type"     => Object::Name(b"Catalog".to_vec()),
+            "Pages"    => Object::Reference(pages_id),
+            "AcroForm" => Object::Reference(acroform_id),
+        });
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+
+        let mut f = NamedTempFile::new().expect("temp");
+        doc.save_to(f.as_file_mut()).expect("save");
+        f
+    }
+
+    #[test]
+    fn detect_form_fields_finds_text_field() {
+        let f = pdf_with_text_field();
+        let doc = Document::open(f.path()).expect("open");
+        let fields = detect_form_fields(&doc);
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].name, "Name");
+        assert_eq!(fields[0].kind, FormFieldKind::TextField);
+    }
+
+    #[test]
+    fn set_field_value_execute_and_undo() {
+        let f = pdf_with_text_field();
+        let mut doc = Document::open(f.path()).expect("open");
+        let mut cmd = SetFieldValueCommand::new("Name", FormFieldValue::Text("Alice".into()));
+        cmd.execute(&mut doc).expect("execute");
+
+        let fields = detect_form_fields(&doc);
+        let field = fields.iter().find(|f| f.name == "Name").expect("field");
+        assert_eq!(field.value, FormFieldValue::Text("Alice".into()));
+
+        cmd.undo(&mut doc).expect("undo");
+        let fields_after = detect_form_fields(&doc);
+        let field_after = fields_after.iter().find(|f| f.name == "Name").expect("field");
+        assert_eq!(field_after.value, FormFieldValue::Text("".into()));
+    }
+
+    #[test]
+    fn set_field_value_nonexistent_field_fails() {
+        let f = pdf_with_text_field();
+        let mut doc = Document::open(f.path()).expect("open");
+        let mut cmd = SetFieldValueCommand::new("NoSuchField", FormFieldValue::Text("x".into()));
+        assert!(cmd.execute(&mut doc).is_err());
+    }
+}

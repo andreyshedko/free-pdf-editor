@@ -136,6 +136,48 @@ pub fn remove_annotation(
     Ok(())
 }
 
+/// Find the lopdf `ObjectId` of the annotation whose `NM` field matches `annotation_id`.
+///
+/// The returned id refers to the annotation dictionary already present in the document's
+/// object store. Because `remove_annotation` only drops the reference from the page's
+/// `Annots` array (it never deletes the object itself), the id remains valid after
+/// removal and can be used to re-attach the annotation on undo.
+pub fn find_annotation_object_id(
+    doc: &Document,
+    page_index: u32,
+    annotation_id: &AnnotationId,
+) -> Result<ObjectId, PdfCoreError> {
+    let page = doc.get_page(page_index)?;
+    let inner = doc.inner();
+
+    let annots_arr = inner
+        .get_object(page.object_id)
+        .ok()
+        .and_then(|o| o.as_dict().ok())
+        .and_then(|d| d.get(b"Annots").ok())
+        .and_then(|o| o.as_array().ok())
+        .cloned()
+        .unwrap_or_default();
+
+    for item in &annots_arr {
+        if let Object::Reference(ref_id) = item {
+            if let Ok(obj) = inner.get_object(*ref_id) {
+                if let Ok(dict) = obj.as_dict() {
+                    if let Ok(nm) = dict.get(b"NM") {
+                        let nm_str = nm.as_str().ok()
+                            .map(|b| String::from_utf8_lossy(b).into_owned())
+                            .unwrap_or_default();
+                        if nm_str == annotation_id.0 {
+                            return Ok(*ref_id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Err(PdfCoreError::AnnotationNotFound(annotation_id.0.clone()))
+}
+
 pub fn read_annotations(doc: &Document, page_index: u32) -> Vec<Annotation> {
     let page = match doc.get_page(page_index) {
         Ok(p) => p,
