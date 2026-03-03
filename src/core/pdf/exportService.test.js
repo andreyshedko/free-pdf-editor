@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// vi.hoisted runs before imports, making the mock objects available inside vi.mock().
 const { mockSrcDoc, mockNewDoc } = vi.hoisted(() => {
   const mockSrcDoc = {
     save: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
@@ -14,7 +13,7 @@ const { mockSrcDoc, mockNewDoc } = vi.hoisted(() => {
     save: vi.fn().mockResolvedValue(new Uint8Array([4, 5, 6])),
     addPage: vi.fn(),
     copyPages: vi.fn().mockImplementation(
-      (_src: unknown, indices: number[]) => Promise.resolve(indices.map(() => ({}))),
+      (_src, indices) => Promise.resolve(indices.map(() => ({}))),
     ),
   };
   return { mockSrcDoc, mockNewDoc };
@@ -33,9 +32,8 @@ import { exportPdf, reorderPages, embedSignature } from './exportService';
 describe('exportService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Re-apply mock implementations cleared by clearAllMocks
-    (PDFDocument.load as ReturnType<typeof vi.fn>).mockResolvedValue(mockSrcDoc);
-    (PDFDocument.create as ReturnType<typeof vi.fn>).mockResolvedValue(mockNewDoc);
+    PDFDocument.load.mockResolvedValue(mockSrcDoc);
+    PDFDocument.create.mockResolvedValue(mockNewDoc);
     mockSrcDoc.save.mockResolvedValue(new Uint8Array([1, 2, 3]));
     mockSrcDoc.embedPng.mockResolvedValue({});
     mockSrcDoc.getPage.mockReturnValue({
@@ -44,7 +42,7 @@ describe('exportService', () => {
     });
     mockNewDoc.save.mockResolvedValue(new Uint8Array([4, 5, 6]));
     mockNewDoc.copyPages.mockImplementation(
-      (_src: unknown, indices: number[]) => Promise.resolve(indices.map(() => ({}))),
+      (_src, indices) => Promise.resolve(indices.map(() => ({}))),
     );
   });
 
@@ -87,7 +85,6 @@ describe('exportService', () => {
   });
 
   describe('embedSignature', () => {
-    // 1×1 transparent PNG as base64
     const pngDataUrl =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 

@@ -3,20 +3,7 @@ import { getOrLoadPdfDocument } from '@core/pdf/pdfjsService';
 
 const THUMB_SCALE = 0.2;
 
-interface PdfThumbnailProps {
-  fileData: ArrayBuffer;
-  pageNumber: number;
-  pageIndex: number;
-  isActive: boolean;
-  isDragOver: boolean;
-  onClick: () => void;
-  onDragStart: (index: number) => void;
-  onDragOver: (e: React.DragEvent, index: number) => void;
-  onDrop: (index: number) => void;
-  onDragEnd: () => void;
-}
-
-export const PdfThumbnail: React.FC<PdfThumbnailProps> = ({
+export const PdfThumbnail = ({
   fileData,
   pageNumber,
   pageIndex,
@@ -28,7 +15,7 @@ export const PdfThumbnail: React.FC<PdfThumbnailProps> = ({
   onDrop,
   onDragEnd,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +41,7 @@ export const PdfThumbnail: React.FC<PdfThumbnailProps> = ({
         await page.render({
           canvasContext: ctx,
           viewport
-        } as Parameters<typeof page.render>[0]).promise;
+        }).promise;
       } catch {
         // ignore
       }

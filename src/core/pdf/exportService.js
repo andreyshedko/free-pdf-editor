@@ -4,16 +4,16 @@ import { PDFDocument } from 'pdf-lib';
  * Given raw PDF bytes, returns saved PDF bytes.
  * Note: password encryption is not yet implemented; the password parameter is reserved for future use.
  */
-export async function exportPdf(sourceBytes: ArrayBuffer, _password?: string): Promise<Uint8Array> {
+export async function exportPdf(sourceBytes, _password) {
   const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
-  const saveOptions: Parameters<typeof pdfDoc.save>[0] = {};
+  const saveOptions = {};
   return pdfDoc.save(saveOptions);
 }
 
 /**
  * Reorder/delete pages by given order array.
  */
-export async function reorderPages(sourceBytes: ArrayBuffer, pageOrder: number[]): Promise<Uint8Array> {
+export async function reorderPages(sourceBytes, pageOrder) {
   const srcDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
   const newDoc = await PDFDocument.create();
   const pages = await newDoc.copyPages(srcDoc, pageOrder);
@@ -24,11 +24,7 @@ export async function reorderPages(sourceBytes: ArrayBuffer, pageOrder: number[]
 /**
  * Embed a signature (PNG data URL) onto the given page in the bottom-right corner.
  */
-export async function embedSignature(
-  sourceBytes: ArrayBuffer,
-  pageIndex: number,
-  signatureDataUrl: string
-): Promise<Uint8Array> {
+export async function embedSignature(sourceBytes, pageIndex, signatureDataUrl) {
   const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
   const page = pdfDoc.getPage(pageIndex);
   const { width, height } = page.getSize();

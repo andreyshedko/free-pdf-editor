@@ -1,14 +1,6 @@
 import { create } from 'zustand';
 
-export interface PageManagementState {
-  pageOrder: number[];
-  initPages: (count: number) => void;
-  deletePage: (index: number) => void;
-  reorderPage: (fromIndex: number, toIndex: number) => void;
-  reset: () => void;
-}
-
-export const usePageManagementStore = create<PageManagementState>((set) => ({
+export const usePageManagementStore = create((set) => ({
   pageOrder: [],
   initPages: (count) => set({ pageOrder: Array.from({ length: count }, (_, i) => i) }),
   deletePage: (index) =>

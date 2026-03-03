@@ -1,15 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
-export interface TextInsertion {
-  text: string;
-  pageIndex: number;
-  x: number;
-  y: number;
-  fontSize: number;
-  color: string;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
+function hexToRgb(hex) {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
     ? {
@@ -25,10 +16,7 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
  * top-left corner (screen convention); they are converted internally to the
  * PDF coordinate system (origin at bottom-left, y increases upward).
  */
-export async function insertText(
-  sourceBytes: ArrayBuffer,
-  insertion: TextInsertion,
-): Promise<Uint8Array> {
+export async function insertText(sourceBytes, insertion) {
   const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const page = pdfDoc.getPage(insertion.pageIndex);

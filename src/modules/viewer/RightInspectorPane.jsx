@@ -3,7 +3,7 @@ import { usePdfDocumentStore } from '@store/pdfDocumentStore';
 import { usePageManagementStore } from '@store/pageManagementStore';
 import { useAnnotationStore } from '@store/annotationStore';
 
-export const RightInspectorPane: React.FC = () => {
+export const RightInspectorPane = () => {
   const { pageCount, currentPageIndex, currentFileName, setCurrentPageIndex } = usePdfDocumentStore();
   const { pageOrder, deletePage } = usePageManagementStore();
   const { activeTool } = useAnnotationStore();
@@ -11,7 +11,6 @@ export const RightInspectorPane: React.FC = () => {
   const handleDeleteCurrentPage = () => {
     const newLength = pageOrder.length - 1;
     deletePage(currentPageIndex);
-    // Clamp currentPageIndex so it stays within the new page list bounds
     if (newLength > 0 && currentPageIndex >= newLength) {
       setCurrentPageIndex(newLength - 1);
     }
@@ -78,4 +77,3 @@ export const RightInspectorPane: React.FC = () => {
     </div>
   );
 };
-

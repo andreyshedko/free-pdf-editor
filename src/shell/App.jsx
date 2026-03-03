@@ -10,7 +10,7 @@ import { OCRPanel } from '@modules/viewer/OCRPanel';
 import { EditorPanel } from '@modules/editor/EditorPanel';
 import { FormsPanel } from '@modules/forms/FormsPanel';
 
-export const App: React.FC = () => {
+export const App = () => {
   const setDocument = usePdfDocumentStore((s) => s.setDocument);
   const zoom = usePdfDocumentStore((s) => s.zoom);
   const setZoom = usePdfDocumentStore((s) => s.setZoom);
@@ -33,8 +33,6 @@ export const App: React.FC = () => {
   const handleExport = useCallback(async () => {
     if (!fileData) return;
     try {
-      // Only invoke the more expensive reorderPages when the order genuinely differs
-      // from the original sequential order (i.e. pages were deleted or reordered).
       const isOrderModified =
         pageOrder.length > 0 && !pageOrder.every((v, i) => v === i);
       const bytes = isOrderModified
@@ -52,7 +50,7 @@ export const App: React.FC = () => {
     }
   }, [fileData, pageOrder, currentFileName]);
 
-  const handleSignatureConfirm = useCallback(async (dataUrl: string) => {
+  const handleSignatureConfirm = useCallback(async (dataUrl) => {
     if (!fileData) return;
     try {
       const actualPage =
@@ -62,7 +60,7 @@ export const App: React.FC = () => {
         newBytes.buffer.slice(
           newBytes.byteOffset,
           newBytes.byteOffset + newBytes.byteLength,
-        ) as ArrayBuffer,
+        ),
       );
       setShowSignaturePanel(false);
     } catch (e) {
@@ -70,9 +68,8 @@ export const App: React.FC = () => {
     }
   }, [fileData, currentPageIndex, pageOrder, updateFileData]);
 
-  // Keyboard shortcut handler
   React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
         e.preventDefault();
         handleOpenPdf();
@@ -98,7 +95,7 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [zoom, setZoom, setTool, handleOpenPdf, handleExport]);
 
-  const isToolActive = (tool: string) => activeTool === tool;
+  const isToolActive = (tool) => activeTool === tool;
 
   return (
     <div className="app-shell" aria-label="Free PDF Editor workspace">
@@ -264,4 +261,3 @@ export const App: React.FC = () => {
     </div>
   );
 };
-

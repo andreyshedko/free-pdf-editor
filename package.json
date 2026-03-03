@@ -2,16 +2,15 @@
   "name": "free-pdf-editor",
   "version": "0.1.0",
   "private": true,
-  "description": "Cross-platform desktop PDF editor built with Electron, React, and TypeScript.",
-  "main": "electron/dist/main.js",
+  "description": "Cross-platform desktop PDF editor built with Electron, React, and JavaScript.",
+  "main": "electron/src/main.js",
   "scripts": {
     "dev": "concurrently -n electron,renderer -c blue,green \"npm:dev:electron\" \"npm:dev:renderer\"",
-    "dev:electron": "npm run build:electron && cross-env NODE_ENV=development electron .",
-    "dev:renderer": "vite --config vite.config.ts",
-    "build": "npm run build:renderer && npm run build:electron",
-    "build:renderer": "vite build --config vite.config.ts",
-    "build:electron": "tsc -p electron/tsconfig.json",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "dev:renderer": "vite --config vite.config.js",
+    "build": "npm run build:renderer",
+    "build:renderer": "vite build --config vite.config.js",
+    "lint": "eslint \"src/**/*.{js,jsx}\"",
     "test": "vitest",
     "preview": "vite preview"
   },
@@ -26,18 +25,12 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@typescript-eslint/eslint-plugin": "^8.13.0",
-    "@typescript-eslint/parser": "^8.13.0",
     "@vitejs/plugin-react-swc": "^4.1.0",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^40.6.1",
     "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
-    "typescript": "^5.7.2",
     "vite": "^6.0.0",
     "vitest": "^4.0.18"
   }

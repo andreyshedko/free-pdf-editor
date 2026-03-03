@@ -1,6 +1,6 @@
 # Free PDF Editor (Desktop)
 
-Cross-platform desktop PDF editor built with **Electron**, **React**, and **TypeScript**.
+Cross-platform desktop PDF editor built with **Electron**, **React**, and **JavaScript**.
 
 Key features:
 

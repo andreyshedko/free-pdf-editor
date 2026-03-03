@@ -3,11 +3,11 @@ import { usePdfDocumentStore } from '@store/pdfDocumentStore';
 import { usePageManagementStore } from '@store/pageManagementStore';
 import { PdfThumbnail } from './PdfThumbnail';
 
-export const PdfThumbnailsPane: React.FC = () => {
+export const PdfThumbnailsPane = () => {
   const { fileData, pageCount, currentPageIndex, setCurrentPageIndex } = usePdfDocumentStore();
   const { pageOrder, reorderPage } = usePageManagementStore();
-  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [dragFromIndex, setDragFromIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   if (!fileData || !pageCount) {
     return (
@@ -29,9 +29,9 @@ export const PdfThumbnailsPane: React.FC = () => {
   const pages =
     pageOrder.length > 0 ? pageOrder : Array.from({ length: pageCount }, (_, i) => i);
 
-  const handleDragStart = (index: number) => setDragFromIndex(index);
-  const handleDragOver = (_e: React.DragEvent, index: number) => setDragOverIndex(index);
-  const handleDrop = (toIndex: number) => {
+  const handleDragStart = (index) => setDragFromIndex(index);
+  const handleDragOver = (_e, index) => setDragOverIndex(index);
+  const handleDrop = (toIndex) => {
     if (dragFromIndex !== null && dragFromIndex !== toIndex) {
       reorderPage(dragFromIndex, toIndex);
     }

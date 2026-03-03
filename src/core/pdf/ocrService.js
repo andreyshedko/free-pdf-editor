@@ -1,6 +1,6 @@
 import { createWorker } from 'tesseract.js';
 
-let workerPromise: Promise<Awaited<ReturnType<typeof createWorker>>> | null = null;
+let workerPromise = null;
 
 function getWorker() {
   if (!workerPromise) {
@@ -12,7 +12,7 @@ function getWorker() {
 /**
  * Run OCR on a canvas element and return recognized text.
  */
-export async function recognizeCanvas(canvas: HTMLCanvasElement): Promise<string> {
+export async function recognizeCanvas(canvas) {
   const worker = await getWorker();
   const { data: { text } } = await worker.recognize(canvas);
   return text;
@@ -22,7 +22,7 @@ export async function recognizeCanvas(canvas: HTMLCanvasElement): Promise<string
  * Terminate the background Tesseract worker and release its memory.
  * Call this when OCR is no longer needed (e.g. on app unload).
  */
-export async function terminateWorker(): Promise<void> {
+export async function terminateWorker() {
   if (workerPromise) {
     const worker = await workerPromise;
     await worker.terminate();

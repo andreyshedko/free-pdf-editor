@@ -3,11 +3,7 @@ import { recognizeCanvas } from '@core/pdf/ocrService';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
 import { getOrLoadPdfDocument } from '@core/pdf/pdfjsService';
 
-interface OCRPanelProps {
-  onClose: () => void;
-}
-
-export const OCRPanel: React.FC<OCRPanelProps> = ({ onClose }) => {
+export const OCRPanel = ({ onClose }) => {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const { fileData, currentPageIndex } = usePdfDocumentStore();
@@ -25,7 +21,7 @@ export const OCRPanel: React.FC<OCRPanelProps> = ({ onClose }) => {
       canvas.height = viewport.height;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      await page.render({ canvasContext: ctx, viewport } as any).promise;
+      await page.render({ canvasContext: ctx, viewport }).promise;
       const result = await recognizeCanvas(canvas);
       setText(result);
     } catch (e) {
