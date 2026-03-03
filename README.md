@@ -82,6 +82,49 @@ To enable real MuPDF rendering (requires the `mupdf` system library):
 cargo build --features pdf-engine/mupdf
 ```
 
+#### Building a release executable
+
+**Linux**
+
+```bash
+cargo build --release --bin pdf-editor
+# output: target/release/pdf-editor
+```
+
+**macOS**
+
+```bash
+cargo build --release --bin pdf-editor
+# output: target/release/pdf-editor
+```
+
+For a universal binary that runs on both Apple Silicon and Intel Macs:
+
+```bash
+rustup target add x86_64-apple-darwin aarch64-apple-darwin
+cargo build --release --target x86_64-apple-darwin --bin pdf-editor
+cargo build --release --target aarch64-apple-darwin --bin pdf-editor
+lipo -create -output pdf-editor \
+  target/x86_64-apple-darwin/release/pdf-editor \
+  target/aarch64-apple-darwin/release/pdf-editor
+# output: pdf-editor (universal binary)
+```
+
+**Windows**
+
+```powershell
+cargo build --release --bin pdf-editor
+# output: target\release\pdf-editor.exe
+```
+
+For a 32-bit executable (x86):
+
+```powershell
+rustup target add i686-pc-windows-msvc
+cargo build --release --target i686-pc-windows-msvc --bin pdf-editor
+# output: target\i686-pc-windows-msvc\release\pdf-editor.exe
+```
+
 ### Run
 
 ```bash
