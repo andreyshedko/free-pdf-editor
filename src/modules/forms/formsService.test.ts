@@ -132,7 +132,7 @@ describe('formsService', () => {
 
     it('silently skips unknown fields', async () => {
       mockForm.getField.mockImplementation(() => { throw new Error('not found'); });
-      await expect(fillFormFields(new ArrayBuffer(8), { missing: 'value' })).resolves.not.toThrow();
+      await expect(fillFormFields(new ArrayBuffer(8), { missing: 'value' })).resolves.toBeInstanceOf(Uint8Array);
     });
   });
 });
