@@ -213,6 +213,7 @@ impl CoreLoop {
 mod tests {
     use super::*;
     use std::sync::mpsc;
+    use std::thread;
     use std::io::Write;
     use tempfile::NamedTempFile;
 

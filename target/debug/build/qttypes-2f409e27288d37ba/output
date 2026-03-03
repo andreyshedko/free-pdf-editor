@@ -1,0 +1,8 @@
+cargo:rustc-check-cfg=cfg(no_qt)
+cargo:rustc-check-cfg=cfg(qt_5_11,qt_5_12,qt_5_15,qreal_is_float)
+cargo:rerun-if-env-changed=QT_INCLUDE_PATH
+cargo:rerun-if-env-changed=QT_LIBRARY_PATH
+cargo:rerun-if-env-changed=QMAKE
+cargo:rustc-cfg=no_qt
+cargo:FOUND=0
+cargo:ERROR_MESSAGE=Failed to execute qmake. Make sure \'qmake\' is in your path!\nentity not found

@@ -1,0 +1,10 @@
+cargo:rerun-if-changed=/home/runner/work/free-pdf-editor/free-pdf-editor/target/debug/build/SLINT_DEFAULT_STYLE.txt
+cargo:rerun-if-changed=/home/runner/work/free-pdf-editor/free-pdf-editor/ui/ui/app.slint
+cargo:rerun-if-env-changed=SLINT_STYLE
+cargo:rerun-if-env-changed=SLINT_FONT_SIZES
+cargo:rerun-if-env-changed=SLINT_SCALE_FACTOR
+cargo:rerun-if-env-changed=SLINT_ASSET_SECTION
+cargo:rerun-if-env-changed=SLINT_EMBED_RESOURCES
+cargo:rerun-if-env-changed=SLINT_EMIT_DEBUG_INFO
+cargo:rerun-if-env-changed=SLINT_LIVE_PREVIEW
+cargo:rustc-env=SLINT_INCLUDE_GENERATED=/home/runner/work/free-pdf-editor/free-pdf-editor/target/debug/build/ui-aa3f2ffd298b32b7/out/app.rs

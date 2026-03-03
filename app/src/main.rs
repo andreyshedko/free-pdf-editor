@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("pdf_editor=debug".parse().unwrap()),
+                .add_directive("app=debug".parse().unwrap()),
         )
         .init();
 

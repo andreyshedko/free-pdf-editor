@@ -1,0 +1,11 @@
+/home/runner/work/free-pdf-editor/free-pdf-editor/target/debug/deps/i_slint_common-c8d32639c109249b.d: /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/lib.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/builtin_structs.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/color_parsing.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/enums.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/key_codes.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/sharedfontique.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/README.md
+
+/home/runner/work/free-pdf-editor/free-pdf-editor/target/debug/deps/libi_slint_common-c8d32639c109249b.rmeta: /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/lib.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/builtin_structs.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/color_parsing.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/enums.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/key_codes.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/sharedfontique.rs /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/README.md
+
+/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/lib.rs:
+/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/builtin_structs.rs:
+/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/color_parsing.rs:
+/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/enums.rs:
+/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/key_codes.rs:
+/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/sharedfontique.rs:
+/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-common-1.15.1/README.md:
