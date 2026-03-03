@@ -65,12 +65,8 @@ impl DocumentCommand for InsertTextCommand {
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
         match page_dict.get(b"Contents") {
-            Ok(Object::Array(_)) => {
-                let mut arr = page_dict.get(b"Contents")
-                    .unwrap()
-                    .as_array()
-                    .unwrap()
-                    .clone();
+            Ok(Object::Array(existing)) => {
+                let mut arr = existing.clone();
                 arr.push(Object::Reference(new_stream_id));
                 page_dict.set("Contents", Object::Array(arr));
             }

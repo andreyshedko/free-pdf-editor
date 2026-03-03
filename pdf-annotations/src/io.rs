@@ -66,8 +66,8 @@ pub fn write_annotation(
         .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
     match page_dict.get(b"Annots") {
-        Ok(Object::Array(_)) => {
-            let mut arr = page_dict.get(b"Annots").unwrap().as_array().unwrap().clone();
+        Ok(Object::Array(existing)) => {
+            let mut arr = existing.clone();
             arr.push(Object::Reference(annot_id));
             page_dict.set("Annots", Object::Array(arr));
         }

@@ -22,7 +22,7 @@ impl DocumentCommand for SetPasswordCommand {
         self.snapshot = Some(buf.into_inner());
         // Note: lopdf 0.39 does not expose a direct encrypt API.
         // Password protection is recorded here for future backend integration.
-        tracing::info!(password_len = self.password.len(), "password set (placeholder - lopdf encryption not available in 0.39)");
+        tracing::info!("password set (placeholder - lopdf encryption not available in 0.39)");
         Ok(())
     }
 
@@ -93,8 +93,8 @@ impl DocumentCommand for RedactRegionCommand {
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
         match page_dict.get(b"Contents") {
-            Ok(Object::Array(_)) => {
-                let mut arr = page_dict.get(b"Contents").unwrap().as_array().unwrap().clone();
+            Ok(Object::Array(existing)) => {
+                let mut arr = existing.clone();
                 arr.push(Object::Reference(new_id));
                 page_dict.set("Contents", Object::Array(arr));
             }
