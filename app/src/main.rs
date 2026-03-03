@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let weak = weak.clone();
                 slint::invoke_from_event_loop(move || {
                     if let Some(window) = weak.upgrade() {
-                        // Re-construct AppController around the borrowed window
+                        // Reconstructing AppController around the borrowed window
                         // is not possible; instead apply the event directly via
                         // the generated setters exposed by AppWindow.
                         apply_event_to_window(&window, event_clone);

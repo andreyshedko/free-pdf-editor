@@ -48,6 +48,7 @@ pub struct Annotation {
 /// An open PDF document.
 ///
 /// Drop releases all native (MuPDF) resources immediately.
+#[derive(Debug)]
 pub struct PdfDocument {
     /// Opaque identifier for cache key generation.
     pub id: u64,

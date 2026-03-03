@@ -85,7 +85,7 @@ mod tests {
             },
             ..Default::default()
         };
-        // Inject a stub document by exploiting the public page_height_pts field.
+        // Configure test state via public fields.
         s.page_height_pts = 842.0;
         s
     }

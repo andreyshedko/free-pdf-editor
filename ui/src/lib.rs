@@ -27,15 +27,20 @@ impl AppController {
         let tx = cmd_tx.clone();
         window.on_open_document(move || {
             tracing::info!("open-document callback");
-            // In production: call platform::pick_open_file() then send Command.
-            // For now emit a placeholder command with a stub path.
-            let _ = tx.send(Command::OpenDocument("/dev/null".into()));
+            // In production: wire platform::pick_open_file() here (via the app
+            // crate, which may inject a callback closure that calls into the
+            // platform crate).  The stub below uses a cross-platform temp path
+            // so that compilation succeeds on all targets.
+            let placeholder = std::env::temp_dir().join("placeholder.pdf");
+            let _ = tx.send(Command::OpenDocument(placeholder));
         });
 
         let tx = cmd_tx.clone();
         window.on_save_document(move || {
             tracing::info!("save-document callback");
-            let _ = tx.send(Command::SaveDocument("/tmp/output.pdf".into()));
+            // Production: replace with platform::pick_save_file().
+            let out = std::env::temp_dir().join("output.pdf");
+            let _ = tx.send(Command::SaveDocument(out));
         });
 
         let tx = cmd_tx.clone();

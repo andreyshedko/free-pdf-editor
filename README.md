@@ -1,63 +1,113 @@
 # Free PDF Editor (Desktop)
 
-Cross-platform desktop PDF editor built with **Electron**, **React**, and **TypeScript**.
+Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** UI, and **MuPDF**.
 
-Key features:
+## Stack
 
-- Electron shell (Windows, macOS, and Linux)
-- React + Vite renderer
-- Zustand state store
-- PDF.js multi-page rendering with virtualized scroll (only visible and nearby pages are rendered; placeholders maintain scroll position for the rest)
-- Fabric.js annotation overlay: freehand draw, highlight, shapes, text comments
-- Signature drawing and embedding into PDF (bottom-right of current page)
-- OCR via Tesseract.js (runs fully offline)
-- Page management: delete pages and reorder via drag-and-drop in the thumbnails pane
-- Text insertion via pdf-lib (Helvetica, configurable position/size/color)
-- PDF form field detection and filling (AcroForm text fields, checkboxes, dropdowns)
-- Export / Save PDF via pdf-lib
-- Security panel (save PDF; password encryption requires a library beyond pdf-lib v1)
+| Layer | Technology |
+|-------|------------|
+| Language | Rust (edition 2021) |
+| UI | [Slint](https://slint.dev) |
+| PDF engine | MuPDF (via Rust bindings, feature-gated) |
+| Build | Cargo workspace |
+| Targets | Windows · macOS · Linux |
+
+## Architecture
+
+The project is a Cargo workspace with six crates:
+
+```
+app ──► ui ──► shared
+ │             ▲
+ ▼             │
+core ──────────┤
+ │             │
+ ▼             │
+pdf-engine ────┘
+      │
+      ▼
+   (MuPDF)
+```
+
+| Crate | Purpose | Thread |
+|-------|---------|--------|
+| `shared` | `Command`, `Event`, error types | any (`Send+Sync`) |
+| `pdf-engine` | Safe MuPDF wrapper / stub renderer | worker threads only |
+| `platform` | File dialogs, clipboard, OS services | UI thread |
+| `core` | `AppState`, `CoreLoop`, LRU page cache | core-loop thread |
+| `ui` | Slint window, `AppController` | UI thread |
+| `app` | Entry point, thread spawning | main thread |
+
+### Thread model
+
+```
+UI thread            cmd_tx ──► core-loop thread ──► render worker threads
+(Slint event loop)              (AppState, cache)     (MuPDF rendering)
+       ▲                                │
+       └────── event-bridge ────────────┘  (invoke_from_event_loop)
+```
+
+- The **UI thread** handles input, layout, and display updates only.
+- The **core-loop thread** owns `AppState` and processes all `Command`s.
+- **Worker threads** run expensive MuPDF rendering and text extraction.
+- MuPDF **never** runs on the UI thread.
+- Communication uses `std::sync::mpsc` channels (no shared mutable state).
+
+### Render pipeline
+
+1. UI sends `Command::ViewportChanged` + `Command::RenderVisiblePages`.
+2. Core computes visible page indices via viewport math.
+3. Core checks the LRU cache (`PageCacheKey = (doc_id, page, zoom)`).
+4. Cache miss → render via `pdf-engine::PdfDocument::render_page`.
+5. Bitmap returned as `Event::PageRendered { data, width, height }`.
+6. Event bridge posts the update to Slint via `invoke_from_event_loop`.
 
 ## Getting started
 
+### Prerequisites
+
+- Rust ≥ 1.75
+- (Optional) MuPDF native library for real PDF rendering
+
+### Build
+
 ```bash
-npm install
-npm run dev
+cargo build
 ```
 
-This starts:
+The default build uses a **stub PDF engine** (no native dependency).
+To enable real MuPDF rendering (requires the `mupdf` system library):
 
-- Vite dev server for the React renderer
-- Electron shell pointing at `http://localhost:5173`
+```bash
+cargo build --features pdf-engine/mupdf
+```
 
-## Keyboard shortcuts
+### Run
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl/Cmd+O` | Open PDF |
-| `Ctrl/Cmd+S` | Export / Save PDF |
-| `Ctrl/Cmd+=` | Zoom in |
-| `Ctrl/Cmd+-` | Zoom out |
-| `Esc` | Deselect tool / close panels |
+```bash
+cargo run --bin pdf-editor
+```
 
-## High-level architecture
+### Test
 
-- `electron/` – Electron main & preload processes, native file dialogs, IPC entrypoints
-- `src/` – React renderer
-  - `shell/` – App chrome & layout (`App.tsx`)
-  - `modules/viewer/` – PDF viewing UI: thumbnails pane with drag-to-reorder, multi-page viewer, right inspector, annotation overlay, OCR panel, signature panel, security panel
-  - `modules/editor/` – Text insertion panel and service (`EditorPanel`, `editorService`)
-  - `modules/forms/` – Form field filling panel and service (`FormsPanel`, `formsService`)
-  - `core/pdf/` – PDF.js rendering service, pdf-lib export/edit/signature service, Tesseract.js OCR service
-  - `store/` – Zustand stores for document state, annotations, page management
+```bash
+cargo test
+```
 
-## Planned / in-progress
+Tests cover:
 
-- PDF password encryption (pdf-lib v1 does not support writing encrypted PDFs; a different library is needed)
-- Image insertion into pages (groundwork exists via `pdfDoc.embedPng`)
+- LRU cache eviction (`core::cache`)
+- Command processing — open, zoom, render, page navigation (`core::command_loop`)
+- Document manager — open/render/extract error handling (`pdf-engine`)
+- `PageCacheKey` zoom encoding (`shared`)
 
-## Next steps
+## Extensibility
 
-- Add tests for viewer components (thumbnails, annotation overlay)
-- Add image insertion panel alongside the text editor
-- Implement PDF password encryption with a suitable library
+The `Command` and `Event` enums in `shared` are the single extension point.
+New tools (annotation, redaction, forms, AI assistant) register by:
 
+1. Adding variants to `Command` / `Event`.
+2. Handling them in `CoreLoop`.
+3. Wiring Slint callbacks in `AppController`.
+
+No business logic lives in the UI layer.
