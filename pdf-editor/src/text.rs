@@ -93,3 +93,64 @@ impl DocumentCommand for InsertTextCommand {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
+    use pdf_core::Document;
+    
+    use tempfile::NamedTempFile;
+
+    fn single_page_pdf() -> NamedTempFile {
+        let mut doc = LopdfDoc::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let page_id = doc.new_object_id();
+        let content = Stream::new(dictionary! {}, b"BT ET".to_vec());
+        let content_id = doc.add_object(content);
+        let page = Object::Dictionary(dictionary! {
+            "Type"     => Object::Name(b"Page".to_vec()),
+            "Parent"   => Object::Reference(pages_id),
+            "MediaBox" => Object::Array(vec![
+                Object::Integer(0), Object::Integer(0),
+                Object::Integer(595), Object::Integer(842),
+            ]),
+            "Contents" => Object::Reference(content_id),
+        });
+        doc.objects.insert(page_id, page);
+        let pages = Object::Dictionary(dictionary! {
+            "Type"  => Object::Name(b"Pages".to_vec()),
+            "Kids"  => Object::Array(vec![Object::Reference(page_id)]),
+            "Count" => Object::Integer(1),
+        });
+        doc.objects.insert(pages_id, pages);
+        let catalog_id = doc.add_object(dictionary! {
+            "Type"  => Object::Name(b"Catalog".to_vec()),
+            "Pages" => Object::Reference(pages_id),
+        });
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        let mut f = NamedTempFile::new().expect("temp");
+        doc.save_to(f.as_file_mut()).expect("save");
+        f
+    }
+
+    #[test]
+    fn insert_text_execute_and_undo() {
+        let f = single_page_pdf();
+        let mut doc = Document::open(f.path()).expect("open");
+        let mut cmd = InsertTextCommand::new(0, "Hello", 100.0, 700.0, 12.0);
+        cmd.execute(&mut doc).expect("execute");
+        // Page count should remain unchanged
+        assert_eq!(doc.page_count(), 1);
+        cmd.undo(&mut doc).expect("undo");
+        assert_eq!(doc.page_count(), 1);
+    }
+
+    #[test]
+    fn insert_text_out_of_range_fails() {
+        let f = single_page_pdf();
+        let mut doc = Document::open(f.path()).expect("open");
+        let mut cmd = InsertTextCommand::new(99, "Hello", 100.0, 700.0, 12.0);
+        assert!(cmd.execute(&mut doc).is_err());
+    }
+}
