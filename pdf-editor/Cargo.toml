@@ -1,0 +1,13 @@
+[package]
+name = "pdf-editor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pdf-core = { path = "../pdf-core" }
+lopdf = "0.39"
+tracing = "0.1"
+thiserror = "1"
+
+[dev-dependencies]
+tempfile = "3"
