@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "app",
+    "core",
+    "pdf-engine",
+    "platform",
+    "shared",
+    "ui",
+]
+resolver = "2"
