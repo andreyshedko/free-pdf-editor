@@ -1,11 +1,5 @@
 [workspace]
 members = [
-    "app",
-    "core",
-    "pdf-engine",
-    "platform",
-    "shared",
-    "ui",
     "pdf-core",
     "pdf-render",
     "pdf-editor",
