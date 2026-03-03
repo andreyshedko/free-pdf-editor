@@ -218,26 +218,55 @@ impl Document {
 
     pub fn merge_document(&mut self, other: &mut Document) -> Result<(), PdfCoreError> {
         let added_pages = other.page_count();
-        // Determine the max object id in self to offset other's IDs
-        let max_id = self.inner.max_id;
-        // Copy all objects from other, offsetting their IDs
+        // Determine the offset: all IDs from other will be shifted by this amount
+        let id_offset = self.inner.max_id;
+
+        // Remap a single ObjectId from other's namespace to self's namespace
+        let remap_id = |id: ObjectId| -> ObjectId { (id.0 + id_offset, id.1) };
+
+        // Recursively remap all Reference objects within a cloned object tree
+        fn remap_object(obj: Object, offset: u32) -> Object {
+            match obj {
+                Object::Reference((n, g)) => Object::Reference((n + offset, g)),
+                Object::Array(arr) => Object::Array(
+                    arr.into_iter().map(|o| remap_object(o, offset)).collect(),
+                ),
+                Object::Dictionary(mut dict) => {
+                    for val in dict.iter_mut() {
+                        let remapped = remap_object(std::mem::replace(val.1, Object::Null), offset);
+                        *val.1 = remapped;
+                    }
+                    Object::Dictionary(dict)
+                }
+                Object::Stream(mut s) => {
+                    for val in s.dict.iter_mut() {
+                        let remapped = remap_object(std::mem::replace(val.1, Object::Null), offset);
+                        *val.1 = remapped;
+                    }
+                    Object::Stream(s)
+                }
+                other => other,
+            }
+        }
+
+        // Copy all objects from other with remapped IDs and internal references
         let other_objects: Vec<(ObjectId, Object)> = other.inner.objects
             .iter()
-            .map(|(&id, obj)| {
-                let new_id = (id.0 + max_id, id.1);
-                (new_id, obj.clone())
-            })
+            .map(|(&id, obj)| (remap_id(id), remap_object(obj.clone(), id_offset)))
             .collect();
         for (id, obj) in other_objects {
             self.inner.objects.insert(id, obj);
         }
+
         // Update max_id
         self.inner.max_id += other.inner.max_id;
-        // Get other's page IDs (before offset was applied to get_pages)
+
+        // Get other's page IDs in self's namespace
         let other_page_ids: Vec<ObjectId> = other.inner.get_pages()
             .values()
-            .map(|&id| (id.0 + max_id, id.1))
+            .map(|&id| remap_id(id))
             .collect();
+
         // Get self's Pages node id
         let pages_id = {
             let catalog = self.inner.catalog()
@@ -247,7 +276,8 @@ impl Document {
                 .as_reference()
                 .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
         };
-        // Extend Kids array
+
+        // Extend the Pages Kids array
         let pages_dict = self.inner
             .get_object_mut(pages_id)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?

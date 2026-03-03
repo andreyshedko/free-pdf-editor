@@ -59,10 +59,31 @@ impl DocumentCommand for SetFieldValueCommand {
     }
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
-        if let Some(old) = self.old_value.take() {
-            let mut cmd = SetFieldValueCommand::new(self.field_name.clone(), old);
-            cmd.execute(doc)?;
-        }
+        let old = match self.old_value.take() {
+            Some(v) => v,
+            None => return Ok(()),
+        };
+        let fields = detect_form_fields(doc);
+        let field = fields
+            .iter()
+            .find(|f| f.full_name == self.field_name || f.name == self.field_name)
+            .ok_or_else(|| PdfCoreError::FieldNotFound(self.field_name.clone()))?;
+        let obj_id = field
+            .object_id
+            .ok_or_else(|| PdfCoreError::FieldNotFound(self.field_name.clone()))?;
+        let restored_obj = match &old {
+            FormFieldValue::Text(s) => Object::string_literal(s.clone()),
+            FormFieldValue::Boolean(b) => Object::Name(if *b { b"Yes".to_vec() } else { b"Off".to_vec() }),
+            FormFieldValue::Selected(s) => Object::string_literal(s.clone()),
+            FormFieldValue::None => Object::Null,
+        };
+        doc.inner_mut()
+            .get_object_mut(obj_id)
+            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+            .as_dict_mut()
+            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+            .set("V", restored_obj);
+        self.old_value = None;
         Ok(())
     }
 }

@@ -42,6 +42,9 @@ impl AppController {
     }
 
     pub fn wire_callbacks(&mut self) {
+        // SAFETY: Slint runs all callbacks on the same GUI thread that owns the window and
+        // this AppController.  AppController's lifetime is tied to the stack frame of main(),
+        // which outlives the window.  No re-entrancy occurs because Slint serialises callbacks.
         let ptr = self as *mut AppController;
 
         let win = match self.window.upgrade() {
@@ -354,7 +357,8 @@ impl AppController {
             let w = rendered.width;
             let h = rendered.height;
             let data = rendered.data.clone();
-            let _ = rendered;
+            // rendered borrow ends here so we can use self.window below
+            drop(rendered);
 
             let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(w, h);
             buf.make_mut_bytes().copy_from_slice(&data);

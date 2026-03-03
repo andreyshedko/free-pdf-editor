@@ -67,7 +67,7 @@ impl DocumentCommand for RedactRegionCommand {
 
         let ops = vec![
             Operation::new("q", vec![]),
-            Operation::new("0 g", vec![]),
+            Operation::new("g", vec![Object::Real(0.0)]),
             Operation::new("re", vec![
                 Object::Real(self.x),
                 Object::Real(self.y),
