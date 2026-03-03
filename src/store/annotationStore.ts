@@ -1,6 +1,29 @@
 import { create } from 'zustand';
 
-export const useAnnotationStore = create((set) => ({
+export type AnnotationTool = 'select' | 'draw' | 'highlight' | 'text' | 'rect' | 'ellipse' | 'signature' | null;
+
+export interface Annotation {
+  id: string;
+  pageIndex: number;
+  type: AnnotationTool;
+  fabricJSON: string;
+}
+
+export interface AnnotationState {
+  activeTool: AnnotationTool;
+  annotationsByPage: Record<number, Annotation[]>;
+  currentColor: string;
+  strokeWidth: number;
+  setTool: (tool: AnnotationTool) => void;
+  addAnnotation: (ann: Annotation) => void;
+  removeAnnotation: (pageIndex: number, id: string) => void;
+  setAnnotationsForPage: (pageIndex: number, anns: Annotation[]) => void;
+  clearAnnotations: () => void;
+  setColor: (color: string) => void;
+  setStrokeWidth: (width: number) => void;
+}
+
+export const useAnnotationStore = create<AnnotationState>((set) => ({
   activeTool: null,
   annotationsByPage: {},
   currentColor: '#ffff00',

@@ -1,9 +1,15 @@
 import { PDFDocument, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup } from 'pdf-lib';
 
-export async function getFormFields(sourceBytes) {
+export interface FormFieldInfo {
+  name: string;
+  type: 'text' | 'checkbox' | 'dropdown' | 'radio' | 'other';
+  value: string;
+}
+
+export async function getFormFields(sourceBytes: ArrayBuffer): Promise<FormFieldInfo[]> {
   const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
   const form = pdfDoc.getForm();
-  return form.getFields().map((field) => {
+  return form.getFields().map((field): FormFieldInfo => {
     const name = field.getName();
     if (field instanceof PDFTextField) {
       return { name, type: 'text', value: field.getText() ?? '' };
@@ -21,7 +27,10 @@ export async function getFormFields(sourceBytes) {
   });
 }
 
-export async function fillFormFields(sourceBytes, values) {
+export async function fillFormFields(
+  sourceBytes: ArrayBuffer,
+  values: Record<string, string>,
+): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
   const form = pdfDoc.getForm();
   for (const [name, value] of Object.entries(values)) {

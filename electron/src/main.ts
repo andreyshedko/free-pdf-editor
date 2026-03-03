@@ -1,10 +1,10 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
-const path = require('path');
-const fs = require('fs');
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
 
 const isDev = process.env.NODE_ENV === 'development';
 
-let mainWindow = null;
+let mainWindow: BrowserWindow | null = null;
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -70,7 +70,7 @@ ipcMain.handle('fs:openPdfDialog', async () => {
   };
 });
 
-ipcMain.handle('fs:savePdfDialog', async (_event, data, defaultName) => {
+ipcMain.handle('fs:savePdfDialog', async (_event, data: ArrayBuffer, defaultName: string) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: defaultName,
     filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
@@ -79,3 +79,4 @@ ipcMain.handle('fs:savePdfDialog', async (_event, data, defaultName) => {
   await fs.promises.writeFile(filePath, Buffer.from(data));
   return true;
 });
+

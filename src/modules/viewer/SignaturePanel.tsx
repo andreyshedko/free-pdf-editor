@@ -1,9 +1,15 @@
 import React, { useRef, useState, useEffect } from 'react';
 
-export const SignaturePanel = ({ onClose, onConfirm }) => {
-  const canvasRef = useRef(null);
+interface SignaturePanelProps {
+  onClose: () => void;
+  onConfirm: (dataUrl: string) => void;
+}
+
+export const SignaturePanel: React.FC<SignaturePanelProps> = ({ onClose, onConfirm }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
+  // The canvas logical size in CSS pixels
   const CSS_WIDTH = 400;
   const CSS_HEIGHT = 200;
 
@@ -11,6 +17,7 @@ export const SignaturePanel = ({ onClose, onConfirm }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
+    // Set the backing store to device pixels so strokes are sharp on HiDPI screens
     canvas.width = CSS_WIDTH * dpr;
     canvas.height = CSS_HEIGHT * dpr;
     canvas.style.width = `${CSS_WIDTH}px`;
@@ -25,7 +32,8 @@ export const SignaturePanel = ({ onClose, onConfirm }) => {
     ctx.lineCap = 'round';
   }, []);
 
-  const getPos = (e, canvas) => {
+  // Convert a mouse event to canvas-local logical coordinates accounting for DPR
+  const getPos = (e: React.MouseEvent, canvas: HTMLCanvasElement) => {
     const r = canvas.getBoundingClientRect();
     const scaleX = CSS_WIDTH / r.width;
     const scaleY = CSS_HEIGHT / r.height;
@@ -35,7 +43,7 @@ export const SignaturePanel = ({ onClose, onConfirm }) => {
     };
   };
 
-  const startDraw = (e) => {
+  const startDraw = (e: React.MouseEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -46,7 +54,7 @@ export const SignaturePanel = ({ onClose, onConfirm }) => {
     ctx.moveTo(x, y);
   };
 
-  const draw = (e) => {
+  const draw = (e: React.MouseEvent) => {
     if (!isDrawing) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -82,6 +90,9 @@ export const SignaturePanel = ({ onClose, onConfirm }) => {
           <span>Draw Signature</span>
           <button className="btn btn-ghost" onClick={onClose}>✕</button>
         </div>
+        {/* Canvas dimensions are set programmatically in useEffect to account for
+            the device pixel ratio (HiDPI/Retina). The CSS size is 400×200 px and
+            the backing store is scaled to CSS_SIZE * dpr physical pixels. */}
         <canvas
           ref={canvasRef}
           className="signature-canvas"

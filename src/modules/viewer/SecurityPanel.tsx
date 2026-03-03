@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { exportPdf } from '@core/pdf/exportService';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
 
-export const SecurityPanel = ({ onClose }) => {
+interface SecurityPanelProps {
+  onClose: () => void;
+}
+
+export const SecurityPanel: React.FC<SecurityPanelProps> = ({ onClose }) => {
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState('');
   const { fileData, currentFileName } = usePdfDocumentStore();

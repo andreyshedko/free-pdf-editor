@@ -1,12 +1,14 @@
 import * as pdfjsLib from 'pdfjs-dist';
+
+// Worker URL for PDF.js - Vite resolves this at build time
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-let cached = null;
-let cachedSource = null;
+let cached: pdfjsLib.PDFDocumentProxy | null = null;
+let cachedSource: ArrayBuffer | null = null;
 
-export async function getOrLoadPdfDocument(data) {
+export async function getOrLoadPdfDocument(data: ArrayBuffer): Promise<pdfjsLib.PDFDocumentProxy> {
   if (cached && cachedSource === data) {
     return cached;
   }
@@ -17,3 +19,4 @@ export async function getOrLoadPdfDocument(data) {
   cachedSource = data;
   return doc;
 }
+

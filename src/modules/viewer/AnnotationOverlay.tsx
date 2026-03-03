@@ -2,14 +2,23 @@ import React, { useEffect, useRef } from 'react';
 import * as fabric from 'fabric';
 import { useAnnotationStore } from '@store/annotationStore';
 
+interface AnnotationOverlayProps {
+  pageIndex: number;
+  width: number;
+  height: number;
+}
+
 const HIGHLIGHT_WIDTH_MULTIPLIER = 8;
 
-export const AnnotationOverlay = ({ pageIndex, width, height }) => {
-  const containerRef = useRef(null);
-  const canvasRef = useRef(null);
-  const fabricRef = useRef(null);
+export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({ pageIndex, width, height }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fabricRef = useRef<fabric.Canvas | null>(null);
   const { activeTool, currentColor, strokeWidth, annotationsByPage, setAnnotationsForPage } = useAnnotationStore();
 
+  // Keep a ref that always reflects the latest activeTool/color/strokeWidth so event
+  // handlers that close over it capture the value at the time of the event, not at
+  // the time the listener was attached.
   const activeToolRef = useRef(activeTool);
   activeToolRef.current = activeTool;
   const currentColorRef = useRef(currentColor);
@@ -17,6 +26,7 @@ export const AnnotationOverlay = ({ pageIndex, width, height }) => {
   const strokeWidthRef = useRef(strokeWidth);
   strokeWidthRef.current = strokeWidth;
 
+  // Initialize fabric canvas
   useEffect(() => {
     const canvasEl = canvasRef.current;
     if (!canvasEl) return;
@@ -30,6 +40,7 @@ export const AnnotationOverlay = ({ pageIndex, width, height }) => {
 
     fabricRef.current = fc;
 
+    // Restore saved annotations – pass the JSON string directly (not pre-parsed)
     const saved = annotationsByPage[pageIndex];
     if (saved && saved.length > 0) {
       const lastAnn = saved[saved.length - 1];
@@ -40,6 +51,8 @@ export const AnnotationOverlay = ({ pageIndex, width, height }) => {
       }
     }
 
+    // Save canvas state whenever objects change; use activeToolRef to capture the
+    // current tool at the time of the event rather than the stale closure value.
     const save = () => {
       const json = JSON.stringify(fc.toJSON());
       setAnnotationsForPage(pageIndex, [{
@@ -53,7 +66,10 @@ export const AnnotationOverlay = ({ pageIndex, width, height }) => {
     fc.on('object:modified', save);
     fc.on('object:removed', save);
 
-    const handleMouseDown = (opt) => {
+    // Handle shape placement (rect / ellipse / text) via Fabric's mouse:down so that
+    // coordinates are resolved by Fabric's own pointer transformation (which accounts
+    // for the upper-canvas offset) rather than raw React mouse event coordinates.
+    const handleMouseDown = (opt: fabric.TPointerEventInfo<MouseEvent>) => {
       const tool = activeToolRef.current;
       if (tool !== 'rect' && tool !== 'ellipse' && tool !== 'text') return;
       const pointer = fc.getPointer(opt.e);
@@ -107,6 +123,7 @@ export const AnnotationOverlay = ({ pageIndex, width, height }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIndex, width, height]);
 
+  // Update drawing mode based on active tool
   useEffect(() => {
     const fc = fabricRef.current;
     if (!fc) return;

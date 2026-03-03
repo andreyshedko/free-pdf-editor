@@ -3,7 +3,11 @@ import { usePdfDocumentStore } from '@store/pdfDocumentStore';
 import { usePageManagementStore } from '@store/pageManagementStore';
 import { insertText } from './editorService';
 
-export const EditorPanel = ({ onClose }) => {
+interface EditorPanelProps {
+  onClose: () => void;
+}
+
+export const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
   const { fileData, currentPageIndex, updateFileData } = usePdfDocumentStore();
   const { pageOrder } = usePageManagementStore();
   const [text, setText] = useState('');
@@ -32,7 +36,7 @@ export const EditorPanel = ({ onClose }) => {
         newBytes.buffer.slice(
           newBytes.byteOffset,
           newBytes.byteOffset + newBytes.byteLength,
-        ),
+        ) as ArrayBuffer,
       );
       setStatus('Text inserted!');
       setText('');

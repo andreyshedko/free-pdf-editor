@@ -4,13 +4,34 @@ import { usePageManagementStore } from '@store/pageManagementStore';
 import { getOrLoadPdfDocument } from '@core/pdf/pdfjsService';
 import { AnnotationOverlay } from './AnnotationOverlay';
 
+interface PageDimensions {
+  width: number;
+  height: number;
+}
+
+/**
+ * Estimated height used for placeholder divs before a page has been rendered.
+ * Using a value close to a typical A4 page at 100% zoom keeps the scrollbar
+ * roughly accurate until actual dimensions are known.
+ */
 const ESTIMATED_PAGE_HEIGHT_PX = 900;
+
+/**
+ * Extra space around the visible viewport that triggers pre-rendering of nearby
+ * pages, so they are ready before the user reaches them while scrolling.
+ */
 const PRELOAD_MARGIN = '600px 0px';
 
-const PdfSinglePage = memo(({ fileData, pageNumber, pageIndex, scale, onDimensionsKnown }) => {
-  const canvasRef = useRef(null);
-  const [dims, setDims] = useState(null);
-  const [error, setError] = useState(null);
+const PdfSinglePage: React.FC<{
+  fileData: ArrayBuffer;
+  pageNumber: number;
+  pageIndex: number;
+  scale: number;
+  onDimensionsKnown: (dims: PageDimensions) => void;
+}> = memo(({ fileData, pageNumber, pageIndex, scale, onDimensionsKnown }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dims, setDims] = useState<PageDimensions | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +55,7 @@ const PdfSinglePage = memo(({ fileData, pageNumber, pageIndex, scale, onDimensio
         const d = { width: viewport.width, height: viewport.height };
         setDims(d);
         onDimensionsKnown(d);
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        await page.render({ canvasContext: ctx, viewport } as any).promise;
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Render error');
       }
@@ -65,28 +86,48 @@ const PdfSinglePage = memo(({ fileData, pageNumber, pageIndex, scale, onDimensio
   );
 });
 
-export const PdfPageViewer = () => {
+export const PdfPageViewer: React.FC = () => {
   const { fileData, pageCount, setPageCount, setCurrentPageIndex, setDocument, zoom } = usePdfDocumentStore();
   const { pageOrder, initPages } = usePageManagementStore();
-  const containerRef = useRef(null);
-  const pageRefs = useRef(new Map());
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  const [renderSet, setRenderSet] = useState(new Set());
-  const [dimCache, setDimCache] = useState(new Map());
+  /**
+   * Set of list-indices whose PdfSinglePage has been (or should be) rendered.
+   * Once a page enters the preload zone it is added here and never removed, so
+   * rendered pages are kept alive rather than being torn down on scroll-away
+   * (avoids re-render cost and annotation-overlay loss on scroll-back).
+   */
+  const [renderSet, setRenderSet] = useState<Set<number>>(new Set());
+
+  /**
+   * Scaled page dimensions reported by each PdfSinglePage after its first
+   * render.  Used to give placeholders the correct height so the scrollbar
+   * stays accurate even before a page has entered the preload zone.
+   */
+  const [dimCache, setDimCache] = useState<Map<number, PageDimensions>>(new Map());
 
   const scale = zoom / 100;
 
+  // Load page count, initialise page store, and reset virtualisation state
+  // whenever fileData changes (new document or an in-place edit).
   useEffect(() => {
     if (fileData) {
       getOrLoadPdfDocument(fileData).then((pdf) => {
         setPageCount(pdf.numPages);
         initPages(pdf.numPages);
+        // Seed the first few pages so they render immediately without waiting
+        // for the IntersectionObserver's first callback.
         setRenderSet(new Set(Array.from({ length: Math.min(3, pdf.numPages) }, (_, i) => i)));
         setDimCache(new Map());
       }).catch(() => {/* ignore */});
     }
   }, [fileData, setPageCount, initPages]);
 
+  // Two IntersectionObservers share the same set of page-holder divs:
+  //   visibleObserver – fires at 50 % visibility to update the current-page index
+  //   preloadObserver – fires as soon as a holder enters the preload margin and
+  //                     adds the page to renderSet so it starts rendering early
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !pageCount) return;
@@ -95,7 +136,7 @@ export const PdfPageViewer = () => {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            const idx = Number(entry.target.dataset.pageIndex ?? -1);
+            const idx = Number((entry.target as HTMLElement).dataset.pageIndex ?? -1);
             if (idx >= 0) setCurrentPageIndex(idx);
           }
         });
@@ -105,10 +146,10 @@ export const PdfPageViewer = () => {
 
     const preloadObserver = new IntersectionObserver(
       (entries) => {
-        const toAdd = [];
+        const toAdd: number[] = [];
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            const idx = Number(entry.target.dataset.pageIndex ?? -1);
+            const idx = Number((entry.target as HTMLElement).dataset.pageIndex ?? -1);
             if (idx >= 0) toAdd.push(idx);
           }
         });
@@ -134,7 +175,7 @@ export const PdfPageViewer = () => {
     };
   }, [pageCount, setCurrentPageIndex]);
 
-  const handleDimsKnown = useCallback((listIndex, dims) => {
+  const handleDimsKnown = useCallback((listIndex: number, dims: PageDimensions) => {
     setDimCache((prev) => {
       const existing = prev.get(listIndex);
       if (existing && existing.width === dims.width && existing.height === dims.height) return prev;
@@ -183,6 +224,8 @@ export const PdfPageViewer = () => {
       {pages.map((origIndex, listIndex) => {
         const isRendered = renderSet.has(listIndex);
         const cached = dimCache.get(listIndex);
+        // Placeholder height: use the cached scaled height when available so the
+        // scrollbar stays accurate, otherwise fall back to the static estimate.
         const placeholderHeight = cached ? cached.height : ESTIMATED_PAGE_HEIGHT_PX * scale;
 
         return (

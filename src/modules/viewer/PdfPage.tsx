@@ -1,9 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getOrLoadPdfDocument } from '@core/pdf/pdfjsService';
+import type { PDFPageProxy } from 'pdfjs-dist';
 
-export const PdfPage = ({ fileData, pageNumber, scale }) => {
-  const canvasRef = useRef(null);
-  const [error, setError] = useState(null);
+interface PdfPageProps {
+  fileData: ArrayBuffer;
+  pageNumber: number;
+  scale: number;
+}
+
+export const PdfPage: React.FC<PdfPageProps> = ({
+  fileData,
+  pageNumber,
+  scale
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -13,7 +24,7 @@ export const PdfPage = ({ fileData, pageNumber, scale }) => {
         const pdf = await getOrLoadPdfDocument(fileData);
         if (cancelled) return;
 
-        const page = await pdf.getPage(pageNumber);
+        const page: PDFPageProxy = await pdf.getPage(pageNumber);
         if (cancelled) return;
 
         const viewport = page.getViewport({ scale });
@@ -32,7 +43,7 @@ export const PdfPage = ({ fileData, pageNumber, scale }) => {
         const renderContext = {
           canvasContext: ctx,
           viewport
-        };
+        } as Parameters<PDFPageProxy['render']>[0];
 
         await page.render(renderContext).promise;
       } catch (e) {

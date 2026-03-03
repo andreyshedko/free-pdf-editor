@@ -4,7 +4,7 @@ import { PdfThumbnailsPane } from './PdfThumbnailsPane';
 import { PdfPageViewer } from './PdfPageViewer';
 import { RightInspectorPane } from './RightInspectorPane';
 
-export const PdfWorkspace = () => {
+export const PdfWorkspace: React.FC = () => {
   const { currentFileName } = usePdfDocumentStore();
 
   return (
@@ -47,3 +47,4 @@ export const PdfWorkspace = () => {
     </main>
   );
 };
+

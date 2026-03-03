@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { usePdfDocumentStore } from '@store/pdfDocumentStore';
-import { getFormFields, fillFormFields } from './formsService';
+import { getFormFields, fillFormFields, FormFieldInfo } from './formsService';
 
-export const FormsPanel = ({ onClose }) => {
+interface FormsPanelProps {
+  onClose: () => void;
+}
+
+export const FormsPanel: React.FC<FormsPanelProps> = ({ onClose }) => {
   const { fileData, updateFileData } = usePdfDocumentStore();
-  const [fields, setFields] = useState([]);
-  const [values, setValues] = useState({});
+  const [fields, setFields] = useState<FormFieldInfo[]>([]);
+  const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
@@ -16,7 +20,7 @@ export const FormsPanel = ({ onClose }) => {
     getFormFields(fileData)
       .then((f) => {
         setFields(f);
-        const initial = {};
+        const initial: Record<string, string> = {};
         f.forEach((field) => { initial[field.name] = field.value; });
         setValues(initial);
       })
@@ -35,7 +39,7 @@ export const FormsPanel = ({ onClose }) => {
         newBytes.buffer.slice(
           newBytes.byteOffset,
           newBytes.byteOffset + newBytes.byteLength,
-        ),
+        ) as ArrayBuffer,
       );
       setStatus('Form fields applied!');
     } catch (e) {
