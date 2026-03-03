@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "pdf-core",
+    "pdf-render",
+    "pdf-editor",
+    "pdf-annotations",
+    "pdf-forms",
+    "app-desktop",
+]
+resolver = "2"

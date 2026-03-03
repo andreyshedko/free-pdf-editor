@@ -1,0 +1,13 @@
+[package]
+name = "core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+shared = { path = "../shared" }
+pdf-engine = { path = "../pdf-engine" }
+lru = "0.12"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
