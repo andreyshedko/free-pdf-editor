@@ -34,8 +34,13 @@ pub trait RenderEngine: Send {
 /// Each call opens the PDF from disk using `mupdf::Document::open`, renders
 /// the requested page to an RGBA pixel buffer, and returns it.  The renderer
 /// itself is a zero-sized type and therefore both `Send` and `Sync`.
+///
+/// This type is only available when the `mupdf` Cargo feature is enabled.
+/// Without it, use [`SoftwareRenderer`] instead.
+#[cfg(feature = "mupdf")]
 pub struct MuPdfRenderer;
 
+#[cfg(feature = "mupdf")]
 impl MuPdfRenderer {
     pub fn new() -> Self {
         Self
@@ -105,12 +110,14 @@ impl MuPdfRenderer {
     }
 }
 
+#[cfg(feature = "mupdf")]
 impl Default for MuPdfRenderer {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(feature = "mupdf")]
 impl RenderEngine for MuPdfRenderer {
     fn render_page(
         &self,

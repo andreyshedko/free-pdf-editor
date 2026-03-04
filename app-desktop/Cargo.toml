@@ -21,3 +21,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [build-dependencies]
 slint-build = "1.9"
 serde_json = "1"
+
+[features]
+# Enable real MuPDF-backed rasterization.
+# Requires cmake, clang/MSVC, and other native build tools to be present.
+mupdf = ["pdf-render/mupdf"]

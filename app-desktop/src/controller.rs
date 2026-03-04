@@ -9,7 +9,9 @@ use pdf_core::{
     event::{DocumentEvent, EventBus},
 };
 use pdf_editor::{DeletePageCommand, RotatePageCommand};
-use pdf_render::{CacheKey, MuPdfRenderer, PageCache, RenderedPage, SoftwareRenderer};
+use pdf_render::{CacheKey, PageCache, RenderedPage, SoftwareRenderer};
+#[cfg(feature = "mupdf")]
+use pdf_render::MuPdfRenderer;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
@@ -23,6 +25,7 @@ const HISTORY_DEPTH: usize = 100;
 /// A render task submitted to the background render worker.
 struct RenderTask {
     doc_id: u64,
+    #[cfg_attr(not(feature = "mupdf"), allow(dead_code))]
     doc_path: std::path::PathBuf,
     page_index: u32,
     page_width: f64,
@@ -618,6 +621,7 @@ fn spawn_render_worker() -> mpsc::SyncSender<RenderTask> {
         .name("render-worker".into())
         .spawn(move || {
             for task in rx {
+                #[cfg(feature = "mupdf")]
                 let result =
                     MuPdfRenderer::render_from_path(&task.doc_path, task.page_index, task.zoom)
                         .or_else(|mupdf_err| {
@@ -631,6 +635,13 @@ fn spawn_render_worker() -> mpsc::SyncSender<RenderTask> {
                                 task.zoom,
                             )
                         });
+                #[cfg(not(feature = "mupdf"))]
+                let result = SoftwareRenderer::render_from_dims(
+                    task.page_index,
+                    task.page_width,
+                    task.page_height,
+                    task.zoom,
+                );
 
                 let rendered = match result {
                     Ok(r) => r,
