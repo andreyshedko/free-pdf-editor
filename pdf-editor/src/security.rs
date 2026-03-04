@@ -270,7 +270,18 @@ fn append_black_rect(
                 ]),
             );
         }
-        _ => {
+        Ok(existing) => {
+            // Preserve any existing direct /Contents object (e.g., a Stream) by
+            // wrapping it together with the new content in an array.
+            page_dict.set(
+                "Contents",
+                Object::Array(vec![
+                    existing.clone(),
+                    Object::Reference(new_id),
+                ]),
+            );
+        }
+        Err(_) => {
             page_dict.set("Contents", Object::Reference(new_id));
         }
     }
