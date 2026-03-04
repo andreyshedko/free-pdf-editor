@@ -191,6 +191,11 @@ impl AppController {
             });
         });
 
+        win.on_activate_license(move || {
+            let me = unsafe { &mut *ptr };
+            me.activate_license_dialog();
+        });
+
         // Display the initial license state in the UI.
         self.update_license_display();
     }
@@ -507,6 +512,49 @@ impl AppController {
             let tx = self.render_tx.clone();
             thread::spawn(move || {
                 let _ = tx.send(task);
+            });
+        }
+    }
+
+    /// Activates a commercial license file.
+    ///
+    /// In debug builds the path is read from the `ACTIVATE_LICENSE` environment
+    /// variable so that activation can be exercised non-interactively (e.g. in
+    /// automated tests).  In release builds this path is not available because
+    /// a native file-picker has not yet been integrated; the button is therefore
+    /// disabled in release to avoid shipping a non-functional code path.
+    fn activate_license_dialog(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            let path = match std::env::var("ACTIVATE_LICENSE") {
+                Ok(p) => std::path::PathBuf::from(p),
+                Err(_) => {
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: "Set ACTIVATE_LICENSE env var to the path of your .pdfeditor-license file".into(),
+                    });
+                    return;
+                }
+            };
+
+            match self.license.activate(&path) {
+                Ok(()) => {
+                    self.update_license_display();
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: "Commercial license activated successfully.".into(),
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!("license activation failed: {e}");
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: format!("License activation failed: {e}"),
+                    });
+                }
+            }
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "License activation is not available in this build.".into(),
             });
         }
     }

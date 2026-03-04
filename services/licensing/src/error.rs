@@ -18,4 +18,8 @@ pub enum LicenseError {
     InvalidPublicKey,
     #[error("invalid base64: {0}")]
     InvalidBase64(String),
+    #[error("license is for a different product")]
+    WrongProduct,
+    #[error("no storage path available on this platform")]
+    NoStoragePath,
 }
