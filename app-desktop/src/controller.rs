@@ -359,12 +359,13 @@ impl AppController {
         let key = CacheKey::new(doc_id, page, self.zoom);
 
         // Fast path: serve from cache without touching the render thread.
-        {
-            let mut cache = self.cache.lock().expect("PageCache mutex was poisoned");
-            if let Some(rendered) = cache.get(&key) {
-                apply_rendered_page(rendered, &self.window, page, page_count);
-                return;
-            }
+        let cached_page = {
+            let cache = self.cache.lock().expect("PageCache mutex was poisoned");
+            cache.get(&key).cloned()
+        };
+        if let Some(rendered) = cached_page {
+            apply_rendered_page(&rendered, &self.window, page, page_count);
+            return;
         }
 
         // Slow path: send to the background render worker.
