@@ -10,9 +10,9 @@ env:
   APP_NAME: FreePDFEditor
   BINARY_NAME: pdf-editor
   # Backend endpoints — configure via repository variables or leave empty to disable.
-  CRASH_ENDPOINT: ""
-  TELEMETRY_ENDPOINT: ""
-  UPDATE_SERVER_URL: ""
+  CRASH_ENDPOINT: ${{ vars.CRASH_ENDPOINT }}
+  TELEMETRY_ENDPOINT: ${{ vars.TELEMETRY_ENDPOINT }}
+  UPDATE_SERVER_URL: ${{ vars.UPDATE_SERVER_URL }}
 
 jobs:
   # ── Extract version, channel, and build number from tag ────────────────────
