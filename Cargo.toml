@@ -7,5 +7,6 @@ members = [
     "pdf-forms",
     "app-desktop",
     "services/licensing",
+    "tools/license-generator",
 ]
 resolver = "2"

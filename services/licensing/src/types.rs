@@ -22,6 +22,8 @@ pub struct LicenseFile {
     /// ISO 8601 date string, e.g. `"2028-01-01"`.
     pub expiry: String,
     pub features: Vec<String>,
+    /// Product identifier that must match the compiled-in `PRODUCT_NAME`.
+    pub product: String,
     /// Base64-encoded ED25519 signature over the payload (all other fields).
     pub signature: String,
 }
