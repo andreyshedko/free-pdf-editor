@@ -44,9 +44,15 @@ impl CrashReport {
         Self {
             crash_id: simple_uuid(),
             timestamp,
-            app_version: env!("APP_VERSION").to_string(),
-            channel: env!("APP_CHANNEL").to_string(),
-            build_number: env!("APP_BUILD_NUMBER").parse().unwrap_or(0),
+            app_version: option_env!("APP_VERSION")
+                .unwrap_or("dev")
+                .to_string(),
+            channel: option_env!("APP_CHANNEL")
+                .unwrap_or("dev")
+                .to_string(),
+            build_number: option_env!("APP_BUILD_NUMBER")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
             os_version: os_version_string(),
             thread_name: thread_name.into(),
             panic_message: panic_message.into(),
