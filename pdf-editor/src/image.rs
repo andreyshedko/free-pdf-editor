@@ -123,35 +123,53 @@ impl DocumentCommand for InsertImageCommand {
         let content_id =
             doc.inner_mut().add_object(Stream::new(lopdf::dictionary! {}, encoded));
 
-        // 3. Clone the page's existing Resources dict (if any).
+        // 3. Clone the page's existing Resources dict (if any), resolving
+        // inherited resources from ancestor page tree nodes if needed.
         let mut resources_dict: lopdf::Dictionary = {
             let inner = doc.inner();
-            let resources_ref: Option<lopdf::ObjectId> = inner
-                .get_object(page_id)
-                .ok()
-                .and_then(|o| o.as_dict().ok())
-                .and_then(|d| d.get(b"Resources").ok())
-                .and_then(|o| o.as_reference().ok());
 
-            if let Some(res_id) = resources_ref {
-                // Resources is an indirect object — follow the reference.
-                inner
-                    .get_object(res_id)
-                    .ok()
-                    .and_then(|o| o.as_dict().ok())
-                    .cloned()
-                    .unwrap_or_else(lopdf::Dictionary::new)
-            } else {
-                // Resources is inline or absent.
-                inner
-                    .get_object(page_id)
-                    .ok()
-                    .and_then(|o| o.as_dict().ok())
-                    .and_then(|d| d.get(b"Resources").ok())
-                    .and_then(|o| o.as_dict().ok())
-                    .cloned()
-                    .unwrap_or_else(lopdf::Dictionary::new)
-            }
+            // Walk up the /Parent chain to find an inline or indirect
+            // /Resources dictionary, starting from the current page.
+            let resolve_resources = |start_id: lopdf::ObjectId| {
+                let mut current_id = start_id;
+                loop {
+                    let page_dict_opt = inner
+                        .get_object(current_id)
+                        .ok()
+                        .and_then(|o| o.as_dict().ok());
+
+                    if let Some(page_dict) = page_dict_opt {
+                        // Try to get /Resources from this node.
+                        if let Ok(res_obj) = page_dict.get(b"Resources") {
+                            // If /Resources is an indirect reference, follow it.
+                            if let Ok(res_id) = res_obj.as_reference() {
+                                if let Ok(obj) = inner.get_object(res_id) {
+                                    if let Ok(dict) = obj.as_dict() {
+                                        return dict.clone();
+                                    }
+                                }
+                            } else if let Ok(dict) = res_obj.as_dict() {
+                                // Inline /Resources dictionary.
+                                return dict.clone();
+                            }
+                        }
+
+                        // No usable /Resources here; follow /Parent if present.
+                        if let Ok(parent_obj) = page_dict.get(b"Parent") {
+                            if let Ok(parent_id) = parent_obj.as_reference() {
+                                current_id = parent_id;
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Reached a node without /Resources and no parent; give up.
+                    break;
+                }
+                lopdf::Dictionary::new()
+            };
+
+            resolve_resources(page_id)
         };
 
         // 4. Get or create the XObject sub-dictionary.
