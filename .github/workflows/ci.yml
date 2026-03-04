@@ -7,6 +7,15 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Default build-time env vars for non-release CI builds.
+  # release.yml overrides these with values from release/release.json.
+  APP_VERSION: "0.0.0"
+  APP_CHANNEL: "stable"
+  APP_BUILD_NUMBER: "0"
+  STORE_BUILD: "0"
+  CRASH_ENDPOINT: ""
+  TELEMETRY_ENDPOINT: ""
+  UPDATE_SERVER_URL: ""
 
 jobs:
   lint:

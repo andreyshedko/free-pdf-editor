@@ -9,9 +9,13 @@ env:
   CARGO_TERM_COLOR: always
   APP_NAME: FreePDFEditor
   BINARY_NAME: pdf-editor
+  # Backend endpoints — configure via repository variables or leave empty to disable.
+  CRASH_ENDPOINT: ""
+  TELEMETRY_ENDPOINT: ""
+  UPDATE_SERVER_URL: ""
 
 jobs:
-  # ── Extract version from tag ────────────────────────────────────────────────
+  # ── Extract version, channel, and build number from tag ────────────────────
   version:
     name: Extract Version
     runs-on: ubuntu-latest
@@ -19,13 +23,39 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.ver.outputs.version }}
+      channel: ${{ steps.ver.outputs.channel }}
+      build_number: ${{ steps.ver.outputs.build_number }}
+      prerelease: ${{ steps.ver.outputs.prerelease }}
     steps:
-      - name: Parse tag
+      - uses: actions/checkout@v4
+
+      - name: Parse tag and generate release.json
         id: ver
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION"
+          TAG="${GITHUB_REF_NAME}"
+          python3 scripts/generate_release_json.py "$TAG" "${{ github.run_number }}"
+
+          VERSION=$(python3 -c "import json; d=json.load(open('release/release.json')); print(d['version'])")
+          CHANNEL=$(python3 -c "import json; d=json.load(open('release/release.json')); print(d['channel'])")
+          BUILD_NUMBER=$(python3 -c "import json; d=json.load(open('release/release.json')); print(d['build_number'])")
+
+          echo "version=$VERSION"       >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL"       >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          # alpha and beta are pre-releases on GitHub
+          if [[ "$CHANNEL" == "stable" ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true"  >> "$GITHUB_OUTPUT"
+          fi
+          echo "Version: $VERSION, channel: $CHANNEL, build: $BUILD_NUMBER"
+
+      - name: Upload release.json artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-json
+          path: release/release.json
+          retention-days: 30
 
   # ── Validate metadata ───────────────────────────────────────────────────────
   validate-metadata:
@@ -36,6 +66,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download release.json
+        uses: actions/download-artifact@v4
+        with:
+          name: release-json
+          path: release
+
       - name: Validate metadata
         run: python3 scripts/validate_metadata.py
 
@@ -83,8 +120,16 @@ jobs:
       contents: read
     env:
       APP_VERSION: ${{ needs.version.outputs.version }}
+      APP_CHANNEL: ${{ needs.version.outputs.channel }}
+      APP_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download release.json
+        uses: actions/download-artifact@v4
+        with:
+          name: release-json
+          path: release
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -101,7 +146,7 @@ jobs:
           key: windows-cargo-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: windows-cargo-release-
 
-      - name: Build Windows release
+      - name: Build Windows release (reads release/release.json)
         run: pwsh scripts/build_windows.ps1
         env:
           PUBLISHER: ${{ secrets.WINDOWS_PUBLISHER }}
@@ -132,8 +177,16 @@ jobs:
       contents: read
     env:
       APP_VERSION: ${{ needs.version.outputs.version }}
+      APP_CHANNEL: ${{ needs.version.outputs.channel }}
+      APP_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download release.json
+        uses: actions/download-artifact@v4
+        with:
+          name: release-json
+          path: release
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -152,7 +205,7 @@ jobs:
           key: macos-cargo-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: macos-cargo-release-
 
-      - name: Build universal binary and .app bundle
+      - name: Build universal binary and .app bundle (reads release/release.json)
         run: bash scripts/build_macos.sh
         env:
           APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
@@ -181,6 +234,43 @@ jobs:
             dist/macos/${{ env.APP_NAME }}_${{ env.APP_VERSION }}.pkg.sha256
           retention-days: 30
 
+  # ── TestFlight upload (beta channel only) ───────────────────────────────────
+  testflight:
+    name: Upload to TestFlight
+    runs-on: macos-latest
+    needs: [build-macos, version]
+    if: needs.version.outputs.channel == 'beta'
+    permissions:
+      contents: read
+    env:
+      APP_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS PKG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-pkg
+          path: dist/macos
+
+      - name: Upload to TestFlight via altool
+        run: |
+          PKG="dist/macos/${APP_NAME}_${APP_VERSION}.pkg"
+          # Write the API key to a temp file so it is never passed on the command line.
+          KEY_FILE="$TMPDIR/apple_api_key.p8"
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$KEY_FILE"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          xcrun altool \
+            --upload-package "$PKG" \
+            --type osx \
+            --apiKey  "$APPLE_API_KEY_ID" \
+            --apiIssuer "$APPLE_API_ISSUER_ID" \
+            --verbose
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+
   # ── Create GitHub Release ───────────────────────────────────────────────────
   release:
     name: Create GitHub Release
@@ -190,6 +280,7 @@ jobs:
       contents: write
     env:
       APP_VERSION: ${{ needs.version.outputs.version }}
+      APP_CHANNEL: ${{ needs.version.outputs.channel }}
     steps:
       - uses: actions/checkout@v4
 
@@ -205,15 +296,23 @@ jobs:
           name: macos-pkg
           path: dist/macos
 
+      - name: Download release.json
+        uses: actions/download-artifact@v4
+        with:
+          name: release-json
+          path: release
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "Free PDF Editor ${{ env.APP_VERSION }}"
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.version.outputs.prerelease }}
           body: |
             ## Free PDF Editor ${{ env.APP_VERSION }}
+
+            **Channel**: ${{ env.APP_CHANNEL }}
 
             ### Installation
 
@@ -228,3 +327,5 @@ jobs:
             dist/windows/${{ env.APP_NAME }}_${{ env.APP_VERSION }}.msix.sha256
             dist/macos/${{ env.APP_NAME }}_${{ env.APP_VERSION }}.pkg
             dist/macos/${{ env.APP_NAME }}_${{ env.APP_VERSION }}.pkg.sha256
+            release/release.json
+

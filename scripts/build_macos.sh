@@ -3,8 +3,8 @@
 # Idempotent macOS universal binary build script.
 # Produces dist/macos/FreePDFEditor.app and a merged universal binary.
 #
-# Required environment variables:
-#   APP_VERSION  - semver string, e.g. "1.4.2"
+# Version/channel/build_number are read exclusively from release/release.json.
+# CI pre-populates that file via scripts/generate_release_json.py.
 #
 # Optional:
 #   SKIP_SIGNING - set to "1" to skip signing/notarization steps
@@ -12,12 +12,19 @@ set -euo pipefail
 
 APP_NAME="FreePDFEditor"
 BINARY_NAME="pdf-editor"
-APP_VERSION="${APP_VERSION:-0.0.0}"
+
+# ── Read from release/release.json ────────────────────────────────────────────
+APP_VERSION="$(python3 -c "import json; d=json.load(open('release/release.json')); print(d['version'])")"
+APP_CHANNEL="$(python3 -c "import json; d=json.load(open('release/release.json')); print(d['channel'])")"
+APP_BUILD_NUMBER="$(python3 -c "import json; d=json.load(open('release/release.json')); print(d['build_number'])")"
+
+export APP_VERSION APP_CHANNEL APP_BUILD_NUMBER STORE_BUILD=1
+
 DIST_DIR="dist/macos"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 CONTENTS="$APP_BUNDLE/Contents"
 
-echo "==> Building $APP_NAME $APP_VERSION (universal binary)"
+echo "==> Building $APP_NAME $APP_VERSION (build $APP_BUILD_NUMBER, channel $APP_CHANNEL, universal binary)"
 
 # ── 1. Build for both architectures ──────────────────────────────────────────
 cargo build --release --target aarch64-apple-darwin

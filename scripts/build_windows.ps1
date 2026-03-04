@@ -2,8 +2,11 @@
 # Idempotent Windows release build script.
 # Produces a signed MSIX package at dist/windows/FreePDFEditor_<VERSION>.msix
 #
+# Version/channel/build_number are read exclusively from release/release.json.
+# CI pre-populates that file via scripts/generate_release_json.py before
+# invoking this script.
+#
 # Required environment variables:
-#   APP_VERSION           - semver string, e.g. "1.4.2"
 #   WINDOWS_CERT_BASE64   - base64-encoded PFX certificate
 #   WINDOWS_CERT_PASSWORD - certificate password
 #   PUBLISHER             - Publisher identity string (CN=...)
@@ -21,14 +24,23 @@ $Target     = "x86_64-pc-windows-msvc"
 $DistDir    = "dist\windows"
 $StageDir   = "$DistDir\stage"
 $AssetsDir  = "assets"
-$Version    = if ($Env:APP_VERSION) { $Env:APP_VERSION } else { "0.0.0" }
-$Publisher  = if ($Env:PUBLISHER)   { $Env:PUBLISHER }   else { "CN=FreePDFEditor" }
+$Publisher  = if ($Env:PUBLISHER) { $Env:PUBLISHER } else { "CN=FreePDFEditor" }
 $CertPath   = "$Env:TEMP\win_cert.pfx"
-$MsixPath   = "$DistDir\${AppName}_${Version}.msix"
 
-Write-Host "==> Building $AppName $Version for $Target"
+# ── Read version/build_number from release/release.json ──────────────────────
+$ReleaseJson = Get-Content "release\release.json" | ConvertFrom-Json
+$Version     = $ReleaseJson.version
+$BuildNumber = $ReleaseJson.build_number
+$Channel     = $ReleaseJson.channel
+$MsixPath    = "$DistDir\${AppName}_${Version}.msix"
 
-# ── 1. Build binary ───────────────────────────────────────────────────────────
+Write-Host "==> Building $AppName $Version (build $BuildNumber, channel $Channel) for $Target"
+
+# ── 1. Build binary (version injected via build.rs) ───────────────────────────
+$Env:APP_VERSION      = $Version
+$Env:APP_CHANNEL      = $Channel
+$Env:APP_BUILD_NUMBER = $BuildNumber
+$Env:STORE_BUILD      = "1"
 cargo build --release --target $Target
 
 # ── 2. Prepare staging layout ─────────────────────────────────────────────────
@@ -60,7 +72,7 @@ $Manifest = $ManifestTemplate `
 
 $Manifest | Set-Content "$StageDir\AppxManifest.xml" -Encoding UTF8
 
-Write-Host "==> AppxManifest.xml generated"
+Write-Host "==> AppxManifest.xml generated (version=$WinVer)"
 
 # ── 4. Sign binary (optional) ────────────────────────────────────────────────
 if ($Env:SKIP_SIGNING -ne "1") {

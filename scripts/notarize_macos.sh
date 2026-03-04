@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # scripts/notarize_macos.sh
 # Idempotent macOS notarization script.
-# Uploads the app bundle to Apple notarization service, waits for approval,
-# then staples the notarization ticket.
+# Reads version from release/release.json (populated by generate_release_json.py).
 #
 # Required environment variables:
-#   APP_VERSION         - semver string
 #   APPLE_API_KEY_ID    - App Store Connect API key ID
 #   APPLE_API_ISSUER_ID - App Store Connect issuer ID
 #   APPLE_API_PRIVATE_KEY - Contents of the .p8 private key file
@@ -13,7 +11,7 @@
 set -euo pipefail
 
 APP_NAME="FreePDFEditor"
-APP_VERSION="${APP_VERSION:-0.0.0}"
+APP_VERSION="$(python3 -c "import json; d=json.load(open('release/release.json')); print(d['version'])")"
 DIST_DIR="dist/macos"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 PKG_PATH="$DIST_DIR/${APP_NAME}_${APP_VERSION}.pkg"
