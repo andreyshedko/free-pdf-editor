@@ -165,8 +165,7 @@ impl LicenseManager {
     /// `signature` field, serialised with keys in sorted order (deterministic).
     fn verify_signature(license: &LicenseFile) -> Result<(), LicenseError> {
         // Decode the compile-time public key.
-        let key_bytes = decode_hex(PUBLIC_KEY_HEX)
-            .map_err(|_| LicenseError::InvalidPublicKey)?;
+        let key_bytes = decode_hex(PUBLIC_KEY_HEX).map_err(|_| LicenseError::InvalidPublicKey)?;
         let key_arr: [u8; 32] = key_bytes
             .try_into()
             .map_err(|_| LicenseError::InvalidPublicKey)?;
@@ -177,8 +176,7 @@ impl LicenseManager {
         let payload = build_payload(license)?;
 
         // Decode the base64 signature stored in the file.
-        let sig_bytes = decode_base64(&license.signature)
-            .map_err(|e| LicenseError::InvalidBase64(e))?;
+        let sig_bytes = decode_base64(&license.signature).map_err(LicenseError::InvalidBase64)?;
         let sig_arr: [u8; 64] = sig_bytes
             .try_into()
             .map_err(|_| LicenseError::InvalidSignature)?;
@@ -203,10 +201,7 @@ impl LicenseManager {
                 license_type: LicenseType::Trial,
                 issued_to: "Trial User".into(),
                 expiry: trial_end,
-                features: vec![
-                    "editor".into(),
-                    "forms".into(),
-                ],
+                features: vec!["editor".into(), "forms".into()],
                 seats: 1,
             }
         } else {
@@ -292,14 +287,12 @@ fn serialise_sorted(val: &Value) -> Result<String, LicenseError> {
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("odd length hex string".into());
     }
     (0..s.len())
         .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| e.to_string())
-        })
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| e.to_string()))
         .collect()
 }
 
@@ -414,7 +407,12 @@ mod tests {
             license_type: LicenseType::Enterprise,
             issued_to: "BigCorp".into(),
             expiry: NaiveDate::from_ymd_opt(9999, 12, 31).unwrap(),
-            features: vec!["editor".into(), "ocr".into(), "forms".into(), "batch".into()],
+            features: vec![
+                "editor".into(),
+                "ocr".into(),
+                "forms".into(),
+                "batch".into(),
+            ],
             seats: 100,
         };
         assert!(state.is_commercial_allowed());
@@ -469,7 +467,7 @@ mod tests {
     #[test]
     fn signed_license_verifies() {
         // Generate a key pair and sign a real license for testing.
-        use ed25519_dalek::{SigningKey, Signer};
+        use ed25519_dalek::{Signer, SigningKey};
         use rand::rngs::OsRng;
 
         let signing_key = SigningKey::generate(&mut OsRng);
@@ -504,8 +502,7 @@ mod tests {
 
     /// Helper: encode bytes to standard base64.
     fn encode_base64(data: &[u8]) -> String {
-        const CHARS: &[u8] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let mut out = String::new();
         for chunk in data.chunks(3) {
             let b0 = chunk[0] as u32;

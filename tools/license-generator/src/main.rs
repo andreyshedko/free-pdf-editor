@@ -147,7 +147,9 @@ fn cmd_generate(args: &[String]) {
             "batch".into(),
         ],
         other => {
-            eprintln!("Unknown license type: {other}. Use: personal, trial, commercial, enterprise");
+            eprintln!(
+                "Unknown license type: {other}. Use: personal, trial, commercial, enterprise"
+            );
             process::exit(1);
         }
     };
@@ -243,7 +245,10 @@ fn cmd_inspect(args: &[String]) {
     println!("Seats      : {}", license.seats);
     println!("Expiry     : {}", license.expiry);
     println!("Features   : {}", license.features.join(", "));
-    println!("Signature  : {}…", &license.signature[..16.min(license.signature.len())]);
+    println!(
+        "Signature  : {}…",
+        &license.signature[..16.min(license.signature.len())]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -271,7 +276,7 @@ fn load_signing_key(hex: &str) -> SigningKey {
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("odd-length hex string".into());
     }
     (0..s.len())
@@ -330,7 +335,10 @@ mod tests {
 
     #[test]
     fn decode_hex_valid() {
-        assert_eq!(decode_hex("deadbeef").unwrap(), vec![0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(
+            decode_hex("deadbeef").unwrap(),
+            vec![0xde, 0xad, 0xbe, 0xef]
+        );
     }
 
     #[test]
@@ -376,12 +384,17 @@ mod tests {
 
         // Re-derive payload (signature field must be excluded).
         let payload2 = build_payload(&license).unwrap();
-        assert_eq!(payload, payload2, "payload must be stable after adding signature");
+        assert_eq!(
+            payload, payload2,
+            "payload must be stable after adding signature"
+        );
 
         // Decode the base64 signature and verify it against the payload.
         let sig_bytes = STANDARD.decode(&license.signature).unwrap();
         let arr: [u8; 64] = sig_bytes.try_into().unwrap();
         let signature = ed25519_dalek::Signature::from_bytes(&arr);
-        assert!(verifying_key.verify(payload2.as_bytes(), &signature).is_ok());
+        assert!(verifying_key
+            .verify(payload2.as_bytes(), &signature)
+            .is_ok());
     }
 }

@@ -15,7 +15,9 @@ pub struct ToolDescriptor {
 
 pub trait Plugin: Send + Sync {
     fn name(&self) -> &str;
-    fn description(&self) -> &str { "" }
+    fn description(&self) -> &str {
+        ""
+    }
     fn on_load(&self, ctx: &mut PluginContext<'_>);
     fn on_unload(&self) {}
 }
@@ -27,7 +29,9 @@ pub struct PluginRegistry {
 }
 
 impl PluginRegistry {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn load(&mut self, plugin: Box<dyn Plugin>, bus: &mut EventBus) {
         let mut ctx = PluginContext {
@@ -45,6 +49,10 @@ impl PluginRegistry {
         self.plugins.clear();
     }
 
-    pub fn plugin_count(&self) -> usize { self.plugins.len() }
-    pub fn registered_tools(&self) -> &HashMap<String, ToolDescriptor> { &self.tools }
+    pub fn plugin_count(&self) -> usize {
+        self.plugins.len()
+    }
+    pub fn registered_tools(&self) -> &HashMap<String, ToolDescriptor> {
+        &self.tools
+    }
 }

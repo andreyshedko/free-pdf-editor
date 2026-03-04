@@ -7,13 +7,29 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Default build-time env vars for non-release CI builds.
+  # release.yml overrides these with values from release/release.json.
+  APP_VERSION: "0.0.0"
+  APP_CHANNEL: "stable"
+  APP_BUILD_NUMBER: "0"
+  STORE_BUILD: "0"
+  CRASH_ENDPOINT: ""
+  TELEMETRY_ENDPOINT: ""
+  UPDATE_SERVER_URL: ""
 
 jobs:
-  test:
-    name: Build & Test
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
 
       - name: Install system dependencies
         run: |
@@ -31,11 +47,98 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-lint-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libfontconfig1-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libxcb1-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Run tests
+        run: cargo test --workspace
+
+  build-debug:
+    name: Build Debug
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libfontconfig1-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libxcb1-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-debug-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-debug-
 
       - name: Build workspace
         run: cargo build --workspace
 
-      - name: Run tests (all crates)
-        run: cargo test --workspace
+      - name: Upload debug artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-build-linux
+          path: target/debug/pdf-editor
+          retention-days: 7
+          if-no-files-found: ignore
+
+  validate-metadata:
+    name: Validate Store Metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate store metadata
+        run: |
+          python3 scripts/validate_metadata.py

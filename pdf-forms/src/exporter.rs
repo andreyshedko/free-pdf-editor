@@ -8,10 +8,10 @@ pub fn export_form_data(doc: &Document) -> Value {
     let mut map = serde_json::Map::new();
     for field in fields {
         let v: Value = match field.value {
-            FormFieldValue::Text(s)    => json!(s),
+            FormFieldValue::Text(s) => json!(s),
             FormFieldValue::Boolean(b) => json!(b),
-            FormFieldValue::Selected(s)=> json!(s),
-            FormFieldValue::None       => Value::Null,
+            FormFieldValue::Selected(s) => json!(s),
+            FormFieldValue::None => Value::Null,
         };
         map.insert(field.full_name, v);
     }

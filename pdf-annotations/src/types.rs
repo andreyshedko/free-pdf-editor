@@ -11,7 +11,9 @@ impl AnnotationId {
 }
 
 impl Default for AnnotationId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,10 +25,38 @@ pub struct Color {
 }
 
 impl Color {
-    pub fn yellow() -> Self { Self { r: 1.0, g: 1.0, b: 0.0, a: 0.5 } }
-    pub fn red()    -> Self { Self { r: 1.0, g: 0.0, b: 0.0, a: 1.0 } }
-    pub fn black()  -> Self { Self { r: 0.0, g: 0.0, b: 0.0, a: 1.0 } }
-    pub fn blue()   -> Self { Self { r: 0.0, g: 0.0, b: 1.0, a: 1.0 } }
+    pub fn yellow() -> Self {
+        Self {
+            r: 1.0,
+            g: 1.0,
+            b: 0.0,
+            a: 0.5,
+        }
+    }
+    pub fn red() -> Self {
+        Self {
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        }
+    }
+    pub fn black() -> Self {
+        Self {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        }
+    }
+    pub fn blue() -> Self {
+        Self {
+            r: 0.0,
+            g: 0.0,
+            b: 1.0,
+            a: 1.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,12 +69,27 @@ pub struct Rect {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AnnotationKind {
-    Highlight { color: Color },
-    Underline { color: Color },
-    Strikeout { color: Color },
-    Note { author: String, content: String },
-    Drawing { color: Color, line_width: f32, points: Vec<(f32, f32)> },
-    Stamp { label: String },
+    Highlight {
+        color: Color,
+    },
+    Underline {
+        color: Color,
+    },
+    Strikeout {
+        color: Color,
+    },
+    Note {
+        author: String,
+        content: String,
+    },
+    Drawing {
+        color: Color,
+        line_width: f32,
+        points: Vec<(f32, f32)>,
+    },
+    Stamp {
+        label: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,9 +118,9 @@ impl Annotation {
             AnnotationKind::Highlight { .. } => "Highlight",
             AnnotationKind::Underline { .. } => "Underline",
             AnnotationKind::Strikeout { .. } => "StrikeOut",
-            AnnotationKind::Note { .. }      => "Text",
-            AnnotationKind::Drawing { .. }   => "Ink",
-            AnnotationKind::Stamp { .. }     => "Stamp",
+            AnnotationKind::Note { .. } => "Text",
+            AnnotationKind::Drawing { .. } => "Ink",
+            AnnotationKind::Stamp { .. } => "Stamp",
         }
     }
 }

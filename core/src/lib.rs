@@ -10,4 +10,5 @@
 
 pub mod cache;
 pub mod command_loop;
+pub mod crash;
 pub mod state;

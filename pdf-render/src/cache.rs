@@ -10,7 +10,9 @@ pub struct PageCache {
 impl PageCache {
     pub fn new(capacity: usize) -> Self {
         let cap = NonZeroUsize::new(capacity.max(1)).unwrap();
-        Self { inner: LruCache::new(cap) }
+        Self {
+            inner: LruCache::new(cap),
+        }
     }
 
     #[instrument(name = "cache_insert", skip(self, page), fields(page_index = page.page_index))]
@@ -30,7 +32,8 @@ impl PageCache {
     }
 
     pub fn evict_document(&mut self, document_id: u64) {
-        let keys_to_remove: Vec<CacheKey> = self.inner
+        let keys_to_remove: Vec<CacheKey> = self
+            .inner
             .iter()
             .filter(|(k, _)| k.document_id == document_id)
             .map(|(k, _)| k.clone())
@@ -40,8 +43,12 @@ impl PageCache {
         }
     }
 
-    pub fn len(&self) -> usize { self.inner.len() }
-    pub fn is_empty(&self) -> bool { self.inner.is_empty() }
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -49,7 +56,12 @@ mod tests {
     use super::*;
 
     fn make_page(idx: u32) -> RenderedPage {
-        RenderedPage { data: vec![255; 4], width: 1, height: 1, page_index: idx }
+        RenderedPage {
+            data: vec![255; 4],
+            width: 1,
+            height: 1,
+            page_index: idx,
+        }
     }
 
     #[test]

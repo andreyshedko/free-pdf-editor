@@ -88,9 +88,7 @@ impl DocumentCommand for CreateFieldCommand {
             field_dict.set("Ff", Object::Integer(1 << 15));
         }
 
-        let field_id = doc
-            .inner_mut()
-            .add_object(Object::Dictionary(field_dict));
+        let field_id = doc.inner_mut().add_object(Object::Dictionary(field_dict));
 
         // ---- Add widget to page /Annots --------------------------------
         {
@@ -195,10 +193,7 @@ impl DocumentCommand for CreateFieldCommand {
                         .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
                         .as_dict_mut()
                         .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
-                        .set(
-                            "Fields",
-                            Object::Array(vec![Object::Reference(field_id)]),
-                        );
+                        .set("Fields", Object::Array(vec![Object::Reference(field_id)]));
                 }
             }
         } else {
@@ -225,8 +220,8 @@ impl DocumentCommand for CreateFieldCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -310,15 +305,23 @@ mod tests {
         assert_eq!(detect_form_fields(&doc).len(), 1);
 
         cmd.undo(&mut doc).expect("undo");
-        assert_eq!(detect_form_fields(&doc).len(), 0, "field should be gone after undo");
+        assert_eq!(
+            detect_form_fields(&doc).len(),
+            0,
+            "field should be gone after undo"
+        );
     }
 
     #[test]
     fn create_checkbox_field() {
         let f = blank_pdf();
         let mut doc = Document::open(f.path()).expect("open");
-        let mut cmd =
-            CreateFieldCommand::new("Agree", FormFieldKind::Checkbox, 0, [72.0, 600.0, 90.0, 618.0]);
+        let mut cmd = CreateFieldCommand::new(
+            "Agree",
+            FormFieldKind::Checkbox,
+            0,
+            [72.0, 600.0, 90.0, 618.0],
+        );
         cmd.execute(&mut doc).expect("execute");
         let fields = detect_form_fields(&doc);
         assert_eq!(fields.len(), 1);
@@ -330,12 +333,22 @@ mod tests {
         let f = blank_pdf();
         let mut doc = Document::open(f.path()).expect("open");
 
-        CreateFieldCommand::new("First", FormFieldKind::TextField, 0, [72.0, 780.0, 300.0, 800.0])
-            .execute(&mut doc)
-            .expect("first");
-        CreateFieldCommand::new("Last", FormFieldKind::TextField, 0, [72.0, 750.0, 300.0, 770.0])
-            .execute(&mut doc)
-            .expect("second");
+        CreateFieldCommand::new(
+            "First",
+            FormFieldKind::TextField,
+            0,
+            [72.0, 780.0, 300.0, 800.0],
+        )
+        .execute(&mut doc)
+        .expect("first");
+        CreateFieldCommand::new(
+            "Last",
+            FormFieldKind::TextField,
+            0,
+            [72.0, 750.0, 300.0, 770.0],
+        )
+        .execute(&mut doc)
+        .expect("second");
 
         let fields = detect_form_fields(&doc);
         assert_eq!(fields.len(), 2);
@@ -358,6 +371,9 @@ mod tests {
         let mut doc = Document::open(f.path()).expect("open");
         let mut cmd =
             CreateFieldCommand::new("X", FormFieldKind::Unknown, 0, [0.0, 0.0, 100.0, 20.0]);
-        assert!(cmd.execute(&mut doc).is_err(), "Unknown kind should return an error");
+        assert!(
+            cmd.execute(&mut doc).is_err(),
+            "Unknown kind should return an error"
+        );
     }
 }

@@ -1,7 +1,6 @@
 use lopdf::{
     content::{Content, Operation},
-    dictionary,
-    Object, Stream,
+    dictionary, Object, Stream,
 };
 use pdf_core::{Document, DocumentCommand, PdfCoreError};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -27,6 +26,7 @@ pub struct InsertImageCommand {
 }
 
 impl InsertImageCommand {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_index: u32,
         data: Vec<u8>,
@@ -94,7 +94,9 @@ impl DocumentCommand for InsertImageCommand {
             "ColorSpace"       => Object::Name(b"DeviceRGB".to_vec()),
             "BitsPerComponent" => Object::Integer(8),
         };
-        let img_id = doc.inner_mut().add_object(Stream::new(img_dict, self.data.clone()));
+        let img_id = doc
+            .inner_mut()
+            .add_object(Stream::new(img_dict, self.data.clone()));
 
         // 2. Build a content stream that draws the image.
         //
@@ -122,8 +124,9 @@ impl DocumentCommand for InsertImageCommand {
         let encoded = Content { operations: ops }
             .encode()
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
-        let content_id =
-            doc.inner_mut().add_object(Stream::new(lopdf::dictionary! {}, encoded));
+        let content_id = doc
+            .inner_mut()
+            .add_object(Stream::new(lopdf::dictionary! {}, encoded));
 
         // 3. Clone the page's existing Resources dict (if any), resolving
         // inherited resources from ancestor page tree nodes if needed.
@@ -175,8 +178,10 @@ impl DocumentCommand for InsertImageCommand {
         };
 
         // 4. Get or create the XObject sub-dictionary.
-        let xobject_ref: Option<lopdf::ObjectId> =
-            resources_dict.get(b"XObject").ok().and_then(|o| o.as_reference().ok());
+        let xobject_ref: Option<lopdf::ObjectId> = resources_dict
+            .get(b"XObject")
+            .ok()
+            .and_then(|o| o.as_reference().ok());
 
         let mut xobject_dict: lopdf::Dictionary = if let Some(xo_id) = xobject_ref {
             doc.inner()
@@ -240,8 +245,8 @@ impl DocumentCommand for InsertImageCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -309,7 +314,10 @@ mod tests {
             .and_then(|o| o.as_dict().ok())
             .and_then(|d| d.get(b"XObject").ok())
             .is_some();
-        assert!(has_xobject, "page should have an XObject resource after insert");
+        assert!(
+            has_xobject,
+            "page should have an XObject resource after insert"
+        );
         cmd.undo(&mut doc).expect("undo");
         assert_eq!(doc.page_count(), 1);
     }
@@ -409,7 +417,9 @@ impl ReplaceImageCommand {
 }
 
 impl DocumentCommand for ReplaceImageCommand {
-    fn description(&self) -> &str { "Replace image" }
+    fn description(&self) -> &str {
+        "Replace image"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let expected = self.new_width as usize * self.new_height as usize * 3;
@@ -450,36 +460,30 @@ impl DocumentCommand for ReplaceImageCommand {
                 };
 
                 // Resolve /Resources, which may itself be an indirect reference.
-                let resources_dict_opt = dict
-                    .get(b"Resources")
-                    .ok()
-                    .and_then(|res_obj| {
-                        if let Ok(res_id) = res_obj.as_reference() {
-                            inner
-                                .get_object(res_id)
-                                .ok()
-                                .and_then(|ro| ro.as_dict().ok())
-                        } else {
-                            res_obj.as_dict().ok()
-                        }
-                    });
+                let resources_dict_opt = dict.get(b"Resources").ok().and_then(|res_obj| {
+                    if let Ok(res_id) = res_obj.as_reference() {
+                        inner
+                            .get_object(res_id)
+                            .ok()
+                            .and_then(|ro| ro.as_dict().ok())
+                    } else {
+                        res_obj.as_dict().ok()
+                    }
+                });
 
                 if let Some(resources_dict) = resources_dict_opt {
                     // Resolve /XObject from the resources dictionary, handling
                     // both direct and indirect forms.
-                    let xobject_dict_opt = resources_dict
-                        .get(b"XObject")
-                        .ok()
-                        .and_then(|xo_obj| {
-                            if let Ok(xo_id) = xo_obj.as_reference() {
-                                inner
-                                    .get_object(xo_id)
-                                    .ok()
-                                    .and_then(|ro| ro.as_dict().ok())
-                            } else {
-                                xo_obj.as_dict().ok()
-                            }
-                        });
+                    let xobject_dict_opt = resources_dict.get(b"XObject").ok().and_then(|xo_obj| {
+                        if let Ok(xo_id) = xo_obj.as_reference() {
+                            inner
+                                .get_object(xo_id)
+                                .ok()
+                                .and_then(|ro| ro.as_dict().ok())
+                        } else {
+                            xo_obj.as_dict().ok()
+                        }
+                    });
 
                     if let Some(xobject_dict) = xobject_dict_opt {
                         // Look for the named image resource and resolve it to
@@ -494,10 +498,7 @@ impl DocumentCommand for ReplaceImageCommand {
                 }
 
                 // Not found at this node; follow /Parent if present.
-                let next_id_opt = dict
-                    .get(b"Parent")
-                    .ok()
-                    .and_then(|p| p.as_reference().ok());
+                let next_id_opt = dict.get(b"Parent").ok().and_then(|p| p.as_reference().ok());
 
                 match next_id_opt {
                     Some(parent_id) => {
@@ -536,9 +537,7 @@ impl DocumentCommand for ReplaceImageCommand {
             stream_obj
                 .dict
                 .set("ColorSpace", Object::Name(b"DeviceRGB".to_vec()));
-            stream_obj
-                .dict
-                .set("BitsPerComponent", Object::Integer(8));
+            stream_obj.dict.set("BitsPerComponent", Object::Integer(8));
             stream_obj
                 .dict
                 .set("Width", Object::Integer(self.new_width as i64));
@@ -591,9 +590,11 @@ impl DocumentCommand for ReplaceImageCommand {
                 self.new_display_height,
             );
 
-            let encoded = lopdf::content::Content { operations: all_ops }
-                .encode()
-                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+            let encoded = lopdf::content::Content {
+                operations: all_ops,
+            }
+            .encode()
+            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
             let new_content_id = doc
                 .inner_mut()
@@ -619,8 +620,8 @@ impl DocumentCommand for ReplaceImageCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -646,10 +647,7 @@ fn collect_content_ids_img(
 
     match contents_obj {
         Object::Reference(id) => vec![*id],
-        Object::Array(arr) => arr
-            .iter()
-            .filter_map(|o| o.as_reference().ok())
-            .collect(),
+        Object::Array(arr) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
         _ => Vec::new(),
     }
 }
@@ -658,7 +656,7 @@ fn collect_content_ids_img(
 /// `resource_name_bytes`.  Only the scale components (a = display_width,
 /// d = display_height) are updated; translation (e, f) is preserved.
 fn update_cm_for_resource(
-    ops: &mut Vec<lopdf::content::Operation>,
+    ops: &mut [lopdf::content::Operation],
     resource_name_bytes: &[u8],
     new_display_width: Option<f32>,
     new_display_height: Option<f32>,
@@ -668,10 +666,7 @@ fn update_cm_for_resource(
             if let Some(Object::Name(ref n)) = ops[i].operands.first() {
                 if n.as_slice() == resource_name_bytes {
                     // Look back for the preceding `cm` (only if one exists).
-                    if i > 0
-                        && ops[i - 1].operator == "cm"
-                        && ops[i - 1].operands.len() == 6
-                    {
+                    if i > 0 && ops[i - 1].operator == "cm" && ops[i - 1].operands.len() == 6 {
                         if let Some(w) = new_display_width {
                             ops[i - 1].operands[0] = Object::Real(w);
                         }
@@ -751,7 +746,8 @@ mod replace_tests {
         let page_id = doc.get_page(0).unwrap().object_id;
         let img_id = doc
             .inner()
-            .get_object(page_id).ok()
+            .get_object(page_id)
+            .ok()
             .and_then(|o| o.as_dict().ok())
             .and_then(|d| d.get(b"Resources").ok())
             .and_then(|o| o.as_dict().ok())
@@ -763,13 +759,20 @@ mod replace_tests {
 
         let (w, h) = doc
             .inner()
-            .get_object(img_id).ok()
+            .get_object(img_id)
+            .ok()
             .and_then(|o| o.as_stream().ok())
             .map(|s| {
-                let w = s.dict.get(b"Width").ok()
+                let w = s
+                    .dict
+                    .get(b"Width")
+                    .ok()
                     .and_then(|o| o.as_i64().ok())
                     .unwrap_or(0);
-                let h = s.dict.get(b"Height").ok()
+                let h = s
+                    .dict
+                    .get(b"Height")
+                    .ok()
                     .and_then(|o| o.as_i64().ok())
                     .unwrap_or(0);
                 (w, h)
@@ -808,8 +811,7 @@ mod replace_tests {
         let (f, _) = pdf_with_image(4, 4);
         let mut doc = Document::open(f.path()).expect("open");
         let new_data = vec![0u8; 2 * 2 * 3];
-        let mut cmd =
-            ReplaceImageCommand::new(0, "NoSuchImage", new_data, 2, 2, None, None);
+        let mut cmd = ReplaceImageCommand::new(0, "NoSuchImage", new_data, 2, 2, None, None);
         assert!(cmd.execute(&mut doc).is_err());
     }
 

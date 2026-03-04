@@ -12,16 +12,22 @@ pub struct SetPasswordCommand {
 
 impl SetPasswordCommand {
     pub fn new(password: impl Into<String>) -> Self {
-        Self { password: password.into(), snapshot: None }
+        Self {
+            password: password.into(),
+            snapshot: None,
+        }
     }
 }
 
 impl DocumentCommand for SetPasswordCommand {
-    fn description(&self) -> &str { "Set password" }
+    fn description(&self) -> &str {
+        "Set password"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let mut buf = std::io::Cursor::new(Vec::new());
-        doc.inner_mut().save_to(&mut buf)
+        doc.inner_mut()
+            .save_to(&mut buf)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         self.snapshot = Some(buf.into_inner());
         // Note: lopdf 0.39 does not expose a direct encrypt API.
@@ -38,8 +44,8 @@ impl DocumentCommand for SetPasswordCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -57,12 +63,21 @@ pub struct RedactRegionCommand {
 
 impl RedactRegionCommand {
     pub fn new(page_index: u32, x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self { page_index, x, y, width, height, snapshot: None }
+        Self {
+            page_index,
+            x,
+            y,
+            width,
+            height,
+            snapshot: None,
+        }
     }
 }
 
 impl DocumentCommand for RedactRegionCommand {
-    fn description(&self) -> &str { "Redact region" }
+    fn description(&self) -> &str {
+        "Redact region"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let mut buf = std::io::Cursor::new(Vec::new());
@@ -99,8 +114,8 @@ impl DocumentCommand for RedactRegionCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -146,9 +161,7 @@ fn try_true_redact(
 
         match contents {
             Some(Object::Reference(id)) => vec![*id],
-            Some(Object::Array(arr)) => {
-                arr.iter().filter_map(|o| o.as_reference().ok()).collect()
-            }
+            Some(Object::Array(arr)) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
             _ => return false,
         }
     };
@@ -167,8 +180,7 @@ fn try_true_redact(
 
         match bytes.and_then(|b| Content::decode(&b).ok()) {
             Some(parsed) => {
-                filtered_ops
-                    .extend(filter_text_in_rect(parsed.operations, x, y, width, height));
+                filtered_ops.extend(filter_text_in_rect(parsed.operations, x, y, width, height));
             }
             None => {
                 // If a content stream cannot be decoded, skip it rather than
@@ -195,7 +207,11 @@ fn try_true_redact(
         Operation::new("Q", vec![]),
     ]);
 
-    let encoded = match (Content { operations: filtered_ops }).encode() {
+    let encoded = match (Content {
+        operations: filtered_ops,
+    })
+    .encode()
+    {
         Ok(e) => e,
         Err(_) => return false,
     };
@@ -268,10 +284,7 @@ fn append_black_rect(
             let old_id = *old_id;
             page_dict.set(
                 "Contents",
-                Object::Array(vec![
-                    Object::Reference(old_id),
-                    Object::Reference(new_id),
-                ]),
+                Object::Array(vec![Object::Reference(old_id), Object::Reference(new_id)]),
             );
         }
         Ok(existing) => {
@@ -279,10 +292,7 @@ fn append_black_rect(
             // wrapping it together with the new content in an array.
             page_dict.set(
                 "Contents",
-                Object::Array(vec![
-                    existing.clone(),
-                    Object::Reference(new_id),
-                ]),
+                Object::Array(vec![existing.clone(), Object::Reference(new_id)]),
             );
         }
         Err(_) => {
@@ -294,13 +304,7 @@ fn append_black_rect(
 
 /// Remove `BT … ET` blocks whose text-drawing position lies within the
 /// rectangle `(rx, ry, rw, rh)` from an operation list.
-fn filter_text_in_rect(
-    ops: Vec<Operation>,
-    rx: f32,
-    ry: f32,
-    rw: f32,
-    rh: f32,
-) -> Vec<Operation> {
+fn filter_text_in_rect(ops: Vec<Operation>, rx: f32, ry: f32, rw: f32, rh: f32) -> Vec<Operation> {
     let mut result = Vec::new();
     let mut i = 0;
 
@@ -363,7 +367,7 @@ fn block_intersects_rect(block: &[Operation], rx: f32, ry: f32, rw: f32, rh: f32
 fn op_to_f32(obj: &Object) -> f32 {
     match obj {
         Object::Integer(i) => *i as f32,
-        Object::Real(r) => *r as f32,
+        Object::Real(r) => *r,
         _ => 0.0,
     }
 }
@@ -381,10 +385,10 @@ mod tests {
         use lopdf::content::Operation;
         let ops = vec![
             Operation::new("BT", vec![]),
-            Operation::new("Tf", vec![
-                Object::Name(b"Helvetica".to_vec()),
-                Object::Real(12.0),
-            ]),
+            Operation::new(
+                "Tf",
+                vec![Object::Name(b"Helvetica".to_vec()), Object::Real(12.0)],
+            ),
             Operation::new("Td", vec![Object::Real(tx), Object::Real(ty)]),
             Operation::new("Tj", vec![Object::string_literal("secret")]),
             Operation::new("ET", vec![]),
@@ -437,9 +441,7 @@ mod tests {
             .and_then(|d| d.get(b"Contents").ok())
         {
             Some(Object::Reference(id)) => vec![*id],
-            Some(Object::Array(arr)) => {
-                arr.iter().filter_map(|o| o.as_reference().ok()).collect()
-            }
+            Some(Object::Array(arr)) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
             _ => Vec::new(),
         };
 

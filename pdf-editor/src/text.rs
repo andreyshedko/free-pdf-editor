@@ -1,15 +1,15 @@
+use lopdf::{
+    content::{Content, Operation},
+    dictionary, Object, Stream,
+};
 use pdf_core::{Document, DocumentCommand, PdfCoreError};
-use lopdf::{content::{Content, Operation}, dictionary, Object, Stream};
 
 // ---------------------------------------------------------------------------
 // Shared helpers used by text commands
 // ---------------------------------------------------------------------------
 
 /// Collect the object IDs of every content stream attached to a page.
-fn collect_content_ids(
-    inner: &lopdf::Document,
-    page_id: lopdf::ObjectId,
-) -> Vec<lopdf::ObjectId> {
+fn collect_content_ids(inner: &lopdf::Document, page_id: lopdf::ObjectId) -> Vec<lopdf::ObjectId> {
     let contents = inner
         .get_object(page_id)
         .ok()
@@ -17,9 +17,7 @@ fn collect_content_ids(
         .and_then(|d| d.get(b"Contents").ok());
     match contents {
         Some(Object::Reference(id)) => vec![*id],
-        Some(Object::Array(arr)) => {
-            arr.iter().filter_map(|o| o.as_reference().ok()).collect()
-        }
+        Some(Object::Array(arr)) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
         _ => vec![],
     }
 }
@@ -87,11 +85,14 @@ impl InsertTextCommand {
 }
 
 impl DocumentCommand for InsertTextCommand {
-    fn description(&self) -> &str { "Insert text" }
+    fn description(&self) -> &str {
+        "Insert text"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let mut buf = std::io::Cursor::new(Vec::new());
-        doc.inner_mut().save_to(&mut buf)
+        doc.inner_mut()
+            .save_to(&mut buf)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         self.snapshot = Some(buf.into_inner());
 
@@ -100,28 +101,29 @@ impl DocumentCommand for InsertTextCommand {
 
         let ops = vec![
             Operation::new("BT", vec![]),
-            Operation::new("Tf", vec![
-                Object::Name(b"Helvetica".to_vec()),
-                Object::Real(self.font_size),
-            ]),
-            Operation::new("Td", vec![
-                Object::Real(self.x),
-                Object::Real(self.y),
-            ]),
+            Operation::new(
+                "Tf",
+                vec![
+                    Object::Name(b"Helvetica".to_vec()),
+                    Object::Real(self.font_size),
+                ],
+            ),
+            Operation::new("Td", vec![Object::Real(self.x), Object::Real(self.y)]),
             Operation::new("Tj", vec![Object::string_literal(self.text.clone())]),
             Operation::new("ET", vec![]),
         ];
         let content = Content { operations: ops };
-        let encoded = content.encode()
+        let encoded = content
+            .encode()
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
-        let new_stream_id = doc.inner_mut().add_object(Stream::new(
-            lopdf::dictionary! {},
-            encoded,
-        ));
+        let new_stream_id = doc
+            .inner_mut()
+            .add_object(Stream::new(lopdf::dictionary! {}, encoded));
 
         let inner = doc.inner_mut();
-        let page_dict = inner.get_object_mut(page_id)
+        let page_dict = inner
+            .get_object_mut(page_id)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
             .as_dict_mut()
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
@@ -134,10 +136,13 @@ impl DocumentCommand for InsertTextCommand {
             }
             Ok(Object::Reference(old_id)) => {
                 let old_id = *old_id;
-                page_dict.set("Contents", Object::Array(vec![
-                    Object::Reference(old_id),
-                    Object::Reference(new_stream_id),
-                ]));
+                page_dict.set(
+                    "Contents",
+                    Object::Array(vec![
+                        Object::Reference(old_id),
+                        Object::Reference(new_stream_id),
+                    ]),
+                );
             }
             _ => {
                 page_dict.set("Contents", Object::Reference(new_stream_id));
@@ -149,8 +154,8 @@ impl DocumentCommand for InsertTextCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -161,7 +166,7 @@ mod tests {
     use super::*;
     use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
     use pdf_core::Document;
-    
+
     use tempfile::NamedTempFile;
 
     fn single_page_pdf() -> NamedTempFile {
@@ -237,11 +242,7 @@ pub struct ModifyTextCommand {
 }
 
 impl ModifyTextCommand {
-    pub fn new(
-        page_index: u32,
-        old_text: impl Into<String>,
-        new_text: impl Into<String>,
-    ) -> Self {
+    pub fn new(page_index: u32, old_text: impl Into<String>, new_text: impl Into<String>) -> Self {
         Self {
             page_index,
             old_text: old_text.into(),
@@ -252,7 +253,9 @@ impl ModifyTextCommand {
 }
 
 impl DocumentCommand for ModifyTextCommand {
-    fn description(&self) -> &str { "Modify text" }
+    fn description(&self) -> &str {
+        "Modify text"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let mut buf = std::io::Cursor::new(Vec::new());
@@ -292,8 +295,8 @@ impl DocumentCommand for ModifyTextCommand {
 
             match bytes {
                 Some(b) => {
-                    let parsed = Content::decode(&b)
-                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+                    let parsed =
+                        Content::decode(&b).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
                     all_ops.extend(parsed.operations.into_iter().map(|mut op| {
                         replace_text_in_op(&mut op, &old_bytes, &new_text);
                         op
@@ -304,9 +307,11 @@ impl DocumentCommand for ModifyTextCommand {
             }
         }
 
-        let encoded = Content { operations: all_ops }
-            .encode()
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let encoded = Content {
+            operations: all_ops,
+        }
+        .encode()
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
         let new_id = doc
             .inner_mut()
@@ -339,8 +344,8 @@ impl DocumentCommand for ModifyTextCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -349,18 +354,20 @@ impl DocumentCommand for ModifyTextCommand {
 #[cfg(test)]
 mod modify_tests {
     use super::*;
-    use lopdf::{content::Content as LContent, content::Operation as LOp, dictionary,
-                Document as LopdfDoc, Object, Stream};
+    use lopdf::{
+        content::Content as LContent, content::Operation as LOp, dictionary, Document as LopdfDoc,
+        Object, Stream,
+    };
     use pdf_core::Document;
     use tempfile::NamedTempFile;
 
     fn pdf_with_text(text: &str) -> NamedTempFile {
         let ops = vec![
             LOp::new("BT", vec![]),
-            LOp::new("Tf", vec![
-                Object::Name(b"Helvetica".to_vec()),
-                Object::Real(12.0),
-            ]),
+            LOp::new(
+                "Tf",
+                vec![Object::Name(b"Helvetica".to_vec()), Object::Real(12.0)],
+            ),
             LOp::new("Td", vec![Object::Real(100.0), Object::Real(700.0)]),
             LOp::new("Tj", vec![Object::string_literal(text.to_owned())]),
             LOp::new("ET", vec![]),
@@ -404,20 +411,21 @@ mod modify_tests {
         use lopdf::content::Content;
         let page_id = doc.get_page(0).unwrap().object_id;
         let inner = doc.inner();
-        let content_ids: Vec<lopdf::ObjectId> =
-            match inner.get_object(page_id).ok()
-                .and_then(|o| o.as_dict().ok())
-                .and_then(|d| d.get(b"Contents").ok())
-            {
-                Some(Object::Reference(id)) => vec![*id],
-                Some(Object::Array(arr)) => {
-                    arr.iter().filter_map(|o| o.as_reference().ok()).collect()
-                }
-                _ => vec![],
-            };
+        let content_ids: Vec<lopdf::ObjectId> = match inner
+            .get_object(page_id)
+            .ok()
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(b"Contents").ok())
+        {
+            Some(Object::Reference(id)) => vec![*id],
+            Some(Object::Array(arr)) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
+            _ => vec![],
+        };
         let mut result = Vec::new();
         for sid in content_ids {
-            let bytes = inner.get_object(sid).ok()
+            let bytes = inner
+                .get_object(sid)
+                .ok()
                 .and_then(|o| o.as_stream().ok())
                 .map(|s| s.content.clone())
                 .unwrap_or_default();
@@ -529,7 +537,9 @@ impl FontSubstitutionCommand {
 }
 
 impl DocumentCommand for FontSubstitutionCommand {
-    fn description(&self) -> &str { "Substitute font" }
+    fn description(&self) -> &str {
+        "Substitute font"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let mut buf = std::io::Cursor::new(Vec::new());
@@ -569,15 +579,14 @@ impl DocumentCommand for FontSubstitutionCommand {
             // If we have a content stream but cannot decode it, fail the command
             // so that the original /Contents remains unchanged.
             if let Some(b) = bytes {
-                let parsed = Content::decode(&b)
-                    .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+                let parsed =
+                    Content::decode(&b).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
                 all_ops.extend(parsed.operations.into_iter().map(|mut op| {
                     if op.operator == "Tf" {
                         if let Some(Object::Name(ref name)) = op.operands.first() {
                             if name == &old_name_bytes {
-                                op.operands[0] =
-                                    Object::Name(new_name_bytes.clone());
+                                op.operands[0] = Object::Name(new_name_bytes.clone());
                             }
                         }
                     }
@@ -590,9 +599,11 @@ impl DocumentCommand for FontSubstitutionCommand {
             }
         }
 
-        let encoded = Content { operations: all_ops }
-            .encode()
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let encoded = Content {
+            operations: all_ops,
+        }
+        .encode()
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
         let new_stream_id = doc
             .inner_mut()
@@ -632,8 +643,8 @@ impl DocumentCommand for FontSubstitutionCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -694,21 +705,20 @@ fn ensure_standard_font(
             }
         }
 
-        found.unwrap_or_else(lopdf::Dictionary::new)
+        found.unwrap_or_default()
     };
 
     // Get or create the /Font sub-dictionary, resolving indirect references.
     let mut font_dict: lopdf::Dictionary = {
         let font_obj = resources_dict.get(b"Font").ok().cloned();
         match font_obj {
-            Some(Object::Reference(font_id)) => {
-                doc.inner()
-                    .get_object(font_id)
-                    .ok()
-                    .and_then(|o| o.as_dict().ok())
-                    .cloned()
-                    .unwrap_or_else(lopdf::Dictionary::new)
-            }
+            Some(Object::Reference(font_id)) => doc
+                .inner()
+                .get_object(font_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok())
+                .cloned()
+                .unwrap_or_else(lopdf::Dictionary::new),
             Some(Object::Dictionary(d)) => d,
             _ => lopdf::Dictionary::new(),
         }
@@ -741,8 +751,10 @@ fn ensure_standard_font(
 #[cfg(test)]
 mod font_tests {
     use super::*;
-    use lopdf::{content::Content as LContent, content::Operation as LOp, dictionary,
-                Document as LopdfDoc, Object, Stream};
+    use lopdf::{
+        content::Content as LContent, content::Operation as LOp, dictionary, Document as LopdfDoc,
+        Object, Stream,
+    };
     use pdf_core::Document;
     use tempfile::NamedTempFile;
 
@@ -751,10 +763,7 @@ mod font_tests {
             LOp::new("BT", vec![]),
             LOp::new(
                 "Tf",
-                vec![
-                    Object::Name(font.as_bytes().to_vec()),
-                    Object::Real(12.0),
-                ],
+                vec![Object::Name(font.as_bytes().to_vec()), Object::Real(12.0)],
             ),
             LOp::new("Td", vec![Object::Real(100.0), Object::Real(700.0)]),
             LOp::new("Tj", vec![Object::string_literal("test".to_owned())]),
@@ -797,20 +806,21 @@ mod font_tests {
         use lopdf::content::Content;
         let page_id = doc.get_page(0).unwrap().object_id;
         let inner = doc.inner();
-        let content_ids: Vec<lopdf::ObjectId> =
-            match inner.get_object(page_id).ok()
-                .and_then(|o| o.as_dict().ok())
-                .and_then(|d| d.get(b"Contents").ok())
-            {
-                Some(Object::Reference(id)) => vec![*id],
-                Some(Object::Array(arr)) => {
-                    arr.iter().filter_map(|o| o.as_reference().ok()).collect()
-                }
-                _ => vec![],
-            };
+        let content_ids: Vec<lopdf::ObjectId> = match inner
+            .get_object(page_id)
+            .ok()
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(b"Contents").ok())
+        {
+            Some(Object::Reference(id)) => vec![*id],
+            Some(Object::Array(arr)) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
+            _ => vec![],
+        };
         let mut result = Vec::new();
         for sid in content_ids {
-            let bytes = inner.get_object(sid).ok()
+            let bytes = inner
+                .get_object(sid)
+                .ok()
                 .and_then(|o| o.as_stream().ok())
                 .map(|s| s.content.clone())
                 .unwrap_or_default();
@@ -853,8 +863,10 @@ mod font_tests {
         cmd.execute(&mut doc).expect("execute");
 
         let page_id = doc.get_page(0).unwrap().object_id;
-        let has_font = doc.inner()
-            .get_object(page_id).ok()
+        let has_font = doc
+            .inner()
+            .get_object(page_id)
+            .ok()
             .and_then(|o| o.as_dict().ok())
             .and_then(|d| d.get(b"Resources").ok())
             .and_then(|o| o.as_dict().ok())
@@ -863,7 +875,10 @@ mod font_tests {
             .map(|font_dict| font_dict.get(b"Times-Roman").is_ok())
             .unwrap_or(false);
 
-        assert!(has_font, "Times-Roman should be added to page /Resources/Font");
+        assert!(
+            has_font,
+            "Times-Roman should be added to page /Resources/Font"
+        );
     }
 
     #[test]

@@ -3,22 +3,56 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DocumentEvent {
-    DocumentOpened { title: String, page_count: u32 },
+    DocumentOpened {
+        title: String,
+        page_count: u32,
+    },
     DocumentClosed,
     DocumentModified,
-    DocumentSaved { path: String },
-    PageChanged { index: u32 },
-    PageAdded { index: u32 },
-    PageDeleted { index: u32 },
-    PageRotated { index: u32, angle: i32 },
+    DocumentSaved {
+        path: String,
+    },
+    PageChanged {
+        index: u32,
+    },
+    PageAdded {
+        index: u32,
+    },
+    PageDeleted {
+        index: u32,
+    },
+    PageRotated {
+        index: u32,
+        angle: i32,
+    },
     PagesReordered,
-    AnnotationAdded { page: u32, annotation_id: String },
-    AnnotationRemoved { page: u32, annotation_id: String },
-    SelectionChanged { page: u32, x: f64, y: f64, width: f64, height: f64 },
-    FormFieldChanged { field_name: String },
-    ZoomChanged { factor: f32 },
-    StatusChanged { message: String },
-    Error { message: String },
+    AnnotationAdded {
+        page: u32,
+        annotation_id: String,
+    },
+    AnnotationRemoved {
+        page: u32,
+        annotation_id: String,
+    },
+    SelectionChanged {
+        page: u32,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
+    FormFieldChanged {
+        field_name: String,
+    },
+    ZoomChanged {
+        factor: f32,
+    },
+    StatusChanged {
+        message: String,
+    },
+    Error {
+        message: String,
+    },
 }
 
 pub struct EventBus {
@@ -35,7 +69,9 @@ impl std::fmt::Debug for EventBus {
 
 impl EventBus {
     pub fn new() -> Self {
-        Self { subscribers: Vec::new() }
+        Self {
+            subscribers: Vec::new(),
+        }
     }
 
     pub fn subscribe(&mut self) -> Receiver<DocumentEvent> {
@@ -50,5 +86,7 @@ impl EventBus {
 }
 
 impl Default for EventBus {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
