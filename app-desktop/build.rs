@@ -62,10 +62,7 @@ fn read_release_metadata() -> (String, String, String) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
             let version = val["version"].as_str().unwrap_or("0.0.0").to_string();
             let channel = val["channel"].as_str().unwrap_or("stable").to_string();
-            let build_number = val["build_number"]
-                .as_u64()
-                .unwrap_or(0)
-                .to_string();
+            let build_number = val["build_number"].as_u64().unwrap_or(0).to_string();
             return (version, channel, build_number);
         }
     }

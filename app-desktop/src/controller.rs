@@ -1,5 +1,8 @@
 use licensing::LicenseManager;
-use pdf_annotations::{AddAnnotationCommand, types::{Annotation, AnnotationKind, Color, Rect}};
+use pdf_annotations::{
+    types::{Annotation, AnnotationKind, Color, Rect},
+    AddAnnotationCommand,
+};
 use pdf_core::{
     command::CommandHistory,
     document::Document,
@@ -8,8 +11,8 @@ use pdf_core::{
 use pdf_editor::{DeletePageCommand, RotatePageCommand};
 use pdf_render::{CacheKey, MuPdfRenderer, PageCache, RenderedPage, SoftwareRenderer};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
-use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
 use std::thread;
 
 use crate::AppWindow;
@@ -132,7 +135,9 @@ impl AppController {
                 if me.current_page + 1 < count {
                     me.current_page += 1;
                     me.render_current_page();
-                    me.emit(DocumentEvent::PageChanged { index: me.current_page });
+                    me.emit(DocumentEvent::PageChanged {
+                        index: me.current_page,
+                    });
                 }
             }
         });
@@ -142,7 +147,9 @@ impl AppController {
             if me.current_page > 0 {
                 me.current_page -= 1;
                 me.render_current_page();
-                me.emit(DocumentEvent::PageChanged { index: me.current_page });
+                me.emit(DocumentEvent::PageChanged {
+                    index: me.current_page,
+                });
             }
         });
 
@@ -179,7 +186,8 @@ impl AppController {
         win.on_upgrade_license(move || {
             let me = unsafe { &mut *ptr };
             me.emit(DocumentEvent::StatusChanged {
-                message: "Visit https://example.com/upgrade to purchase a commercial license.".into(),
+                message: "Visit https://example.com/upgrade to purchase a commercial license."
+                    .into(),
             });
         });
 
@@ -204,13 +212,18 @@ impl AppController {
                 self.document = Some(doc);
                 self.current_page = 0;
                 self.history.clear();
-                self.cache.lock().expect("PageCache mutex was poisoned").evict_document(self.document.as_ref().unwrap().id);
+                self.cache
+                    .lock()
+                    .expect("PageCache mutex was poisoned")
+                    .evict_document(self.document.as_ref().unwrap().id);
                 self.render_current_page();
                 self.emit(DocumentEvent::DocumentOpened { title, page_count });
                 self.update_undo_redo_state();
             }
             Err(e) => {
-                self.emit(DocumentEvent::Error { message: e.to_string() });
+                self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                });
             }
         }
     }
@@ -229,7 +242,9 @@ impl AppController {
                     let path = doc.path.display().to_string();
                     self.emit(DocumentEvent::DocumentSaved { path });
                 }
-                Err(e) => self.emit(DocumentEvent::Error { message: e.to_string() }),
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
             }
         }
     }
@@ -256,14 +271,19 @@ impl AppController {
                 Ok(()) => self.emit(DocumentEvent::DocumentSaved {
                     path: path.display().to_string(),
                 }),
-                Err(e) => self.emit(DocumentEvent::Error { message: e.to_string() }),
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
             }
         }
     }
 
     fn close_document(&mut self) {
         if let Some(doc) = self.document.take() {
-            self.cache.lock().expect("PageCache mutex was poisoned").evict_document(doc.id);
+            self.cache
+                .lock()
+                .expect("PageCache mutex was poisoned")
+                .evict_document(doc.id);
         }
         self.current_page = 0;
         self.history.clear();
@@ -273,7 +293,10 @@ impl AppController {
     fn set_zoom(&mut self, zoom: f32) {
         let zoom = zoom.clamp(0.1, 10.0);
         if let Some(doc) = &self.document {
-            self.cache.lock().expect("PageCache mutex was poisoned").evict_document(doc.id);
+            self.cache
+                .lock()
+                .expect("PageCache mutex was poisoned")
+                .evict_document(doc.id);
         }
         self.zoom = zoom;
         self.render_current_page();
@@ -283,7 +306,9 @@ impl AppController {
     fn undo(&mut self) {
         if let Some(doc) = &mut self.document {
             if let Err(e) = self.history.undo(doc) {
-                self.emit(DocumentEvent::Error { message: e.to_string() });
+                self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                });
             } else {
                 self.render_current_page();
                 self.update_undo_redo_state();
@@ -294,7 +319,9 @@ impl AppController {
     fn redo(&mut self) {
         if let Some(doc) = &mut self.document {
             if let Err(e) = self.history.redo(doc) {
-                self.emit(DocumentEvent::Error { message: e.to_string() });
+                self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                });
             } else {
                 self.render_current_page();
                 self.update_undo_redo_state();
@@ -303,11 +330,20 @@ impl AppController {
     }
 
     fn add_highlight_annotation(&mut self) {
-        if self.document.is_none() { return; }
+        if self.document.is_none() {
+            return;
+        }
         let annotation = Annotation::new(
             self.current_page,
-            Rect { x: 72.0, y: 700.0, width: 200.0, height: 20.0 },
-            AnnotationKind::Highlight { color: Color::yellow() },
+            Rect {
+                x: 72.0,
+                y: 700.0,
+                width: 200.0,
+                height: 20.0,
+            },
+            AnnotationKind::Highlight {
+                color: Color::yellow(),
+            },
         );
         let id = annotation.id.0.clone();
         let cmd = Box::new(AddAnnotationCommand::new(annotation));
@@ -320,16 +356,25 @@ impl AppController {
                     });
                     self.update_undo_redo_state();
                 }
-                Err(e) => self.emit(DocumentEvent::Error { message: e.to_string() }),
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
             }
         }
     }
 
     fn add_note_annotation(&mut self) {
-        if self.document.is_none() { return; }
+        if self.document.is_none() {
+            return;
+        }
         let annotation = Annotation::new(
             self.current_page,
-            Rect { x: 500.0, y: 750.0, width: 20.0, height: 20.0 },
+            Rect {
+                x: 500.0,
+                y: 750.0,
+                width: 20.0,
+                height: 20.0,
+            },
             AnnotationKind::Note {
                 author: "User".into(),
                 content: "Note added by editor".into(),
@@ -346,13 +391,17 @@ impl AppController {
                     });
                     self.update_undo_redo_state();
                 }
-                Err(e) => self.emit(DocumentEvent::Error { message: e.to_string() }),
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
             }
         }
     }
 
     fn delete_current_page(&mut self) {
-        if self.document.is_none() { return; }
+        if self.document.is_none() {
+            return;
+        }
         let page = self.current_page;
         let cmd = Box::new(DeletePageCommand::new(page));
         if let Some(doc) = &mut self.document {
@@ -366,26 +415,38 @@ impl AppController {
                     self.emit(DocumentEvent::PageDeleted { index: page });
                     self.update_undo_redo_state();
                 }
-                Err(e) => self.emit(DocumentEvent::Error { message: e.to_string() }),
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
             }
         }
     }
 
     fn rotate_current_page(&mut self) {
-        if self.document.is_none() { return; }
+        if self.document.is_none() {
+            return;
+        }
         let page = self.current_page;
         let cmd = Box::new(RotatePageCommand::new(page, 90));
         if let Some(doc) = &mut self.document {
             match self.history.execute(cmd, doc) {
                 Ok(()) => {
                     if let Some(ref doc) = self.document {
-                        self.cache.lock().expect("PageCache mutex was poisoned").evict_document(doc.id);
+                        self.cache
+                            .lock()
+                            .expect("PageCache mutex was poisoned")
+                            .evict_document(doc.id);
                     }
                     self.render_current_page();
-                    self.emit(DocumentEvent::PageRotated { index: page, angle: 90 });
+                    self.emit(DocumentEvent::PageRotated {
+                        index: page,
+                        angle: 90,
+                    });
                     self.update_undo_redo_state();
                 }
-                Err(e) => self.emit(DocumentEvent::Error { message: e.to_string() }),
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
             }
         }
     }
@@ -420,7 +481,9 @@ impl AppController {
             let page_obj = match doc.get_page(page) {
                 Ok(p) => p,
                 Err(e) => {
-                    self.emit(DocumentEvent::Error { message: e.to_string() });
+                    self.emit(DocumentEvent::Error {
+                        message: e.to_string(),
+                    });
                     return;
                 }
             };
@@ -468,10 +531,7 @@ impl AppController {
                 licensing::LicenseType::Enterprise => "Enterprise",
             };
             win.set_license_type(license_type_str.into());
-            let expiry = if matches!(
-                state.license_type,
-                licensing::LicenseType::Personal
-            ) {
+            let expiry = if matches!(state.license_type, licensing::LicenseType::Personal) {
                 // Personal has no meaningful expiry.
                 String::new()
             } else {
@@ -509,22 +569,19 @@ fn spawn_render_worker() -> mpsc::SyncSender<RenderTask> {
         .name("render-worker".into())
         .spawn(move || {
             for task in rx {
-                let result = MuPdfRenderer::render_from_path(
-                    &task.doc_path,
-                    task.page_index,
-                    task.zoom,
-                )
-                .or_else(|mupdf_err| {
-                    tracing::debug!(
+                let result =
+                    MuPdfRenderer::render_from_path(&task.doc_path, task.page_index, task.zoom)
+                        .or_else(|mupdf_err| {
+                            tracing::debug!(
                         "MuPDF render failed ({mupdf_err}), falling back to software renderer"
                     );
-                    SoftwareRenderer::render_from_dims(
-                        task.page_index,
-                        task.page_width,
-                        task.page_height,
-                        task.zoom,
-                    )
-                });
+                            SoftwareRenderer::render_from_dims(
+                                task.page_index,
+                                task.page_width,
+                                task.page_height,
+                                task.zoom,
+                            )
+                        });
 
                 let rendered = match result {
                     Ok(r) => r,

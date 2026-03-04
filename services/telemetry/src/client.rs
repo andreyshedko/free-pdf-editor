@@ -35,7 +35,10 @@ impl TelemetryClient {
                 .ok();
         }
 
-        Self { enabled, sender: tx }
+        Self {
+            enabled,
+            sender: tx,
+        }
     }
 
     /// Queue an event.  No-op when disabled or when the channel is full.

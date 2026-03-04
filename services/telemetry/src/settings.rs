@@ -14,7 +14,9 @@ pub struct TelemetrySettings {
 
 impl Default for TelemetrySettings {
     fn default() -> Self {
-        Self { telemetry_enabled: false }
+        Self {
+            telemetry_enabled: false,
+        }
     }
 }
 

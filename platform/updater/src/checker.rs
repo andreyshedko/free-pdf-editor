@@ -2,7 +2,7 @@
 
 use super::manifest::{ChannelEntry, UpdateManifest};
 use semver::Version;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Update server URL configured at compile time via `UPDATE_SERVER_URL` build env.
 const UPDATE_SERVER_URL: &str = env!("UPDATE_SERVER_URL");
@@ -44,9 +44,9 @@ pub fn check_for_update(channel: &str) -> Result<Option<UpdateInfo>, Box<dyn std
         .map_err(|e| format!("update manifest parse failed: {e}"))?;
 
     let entry: Option<&ChannelEntry> = match channel {
-        "alpha"  => manifest.alpha.as_ref(),
-        "beta"   => manifest.beta.as_ref(),
-        _        => manifest.stable.as_ref(),
+        "alpha" => manifest.alpha.as_ref(),
+        "beta" => manifest.beta.as_ref(),
+        _ => manifest.stable.as_ref(),
     };
 
     let Some(entry) = entry else {
