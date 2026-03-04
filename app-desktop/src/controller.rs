@@ -1,3 +1,4 @@
+use licensing::LicenseManager;
 use pdf_annotations::{AddAnnotationCommand, types::{Annotation, AnnotationKind, Color, Rect}};
 use pdf_core::{
     command::CommandHistory,
@@ -48,6 +49,8 @@ pub struct AppController {
     zoom: f32,
     current_page: u32,
     bus: EventBus,
+    /// Licensing state – derived from cryptographic validation at startup.
+    license: LicenseManager,
     /// Channel to the background render worker thread.
     render_tx: mpsc::SyncSender<RenderTask>,
     /// Monotonically-increasing counter.  Incremented every time the desired
@@ -60,6 +63,7 @@ impl AppController {
     pub fn new(window: Weak<AppWindow>, evt_tx: Sender<DocumentEvent>) -> Self {
         let cache = Arc::new(Mutex::new(PageCache::new(CACHE_CAPACITY)));
         let render_tx = spawn_render_worker();
+        let license = LicenseManager::new();
         Self {
             window,
             evt_tx,
@@ -69,6 +73,7 @@ impl AppController {
             zoom: 1.0,
             current_page: 0,
             bus: EventBus::new(),
+            license,
             render_tx,
             render_generation: Arc::new(AtomicU64::new(0)),
         }
@@ -170,6 +175,16 @@ impl AppController {
             let me = unsafe { &mut *ptr };
             me.rotate_current_page();
         });
+
+        win.on_upgrade_license(move || {
+            let me = unsafe { &mut *ptr };
+            me.emit(DocumentEvent::StatusChanged {
+                message: "Visit https://example.com/upgrade to purchase a commercial license.".into(),
+            });
+        });
+
+        // Display the initial license state in the UI.
+        self.update_license_display();
     }
 
     fn open_document_dialog(&mut self) {
@@ -201,6 +216,13 @@ impl AppController {
     }
 
     fn save_document(&mut self) {
+        // Check license before borrowing document mutably.
+        let needs_watermark_notice = !self.license.is_commercial_allowed();
+        if needs_watermark_notice {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Saving with personal license – exported PDF may contain watermark for commercial use.".into(),
+            });
+        }
         if let Some(doc) = &mut self.document {
             match doc.save() {
                 Ok(()) => {
@@ -222,6 +244,13 @@ impl AppController {
                 return;
             }
         };
+        // Check license before borrowing document mutably.
+        let needs_watermark_notice = !self.license.is_commercial_allowed();
+        if needs_watermark_notice {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Saving with personal license – exported PDF may contain watermark for commercial use.".into(),
+            });
+        }
         if let Some(doc) = &mut self.document {
             match doc.save_to(&path) {
                 Ok(()) => self.emit(DocumentEvent::DocumentSaved {
@@ -423,6 +452,32 @@ impl AppController {
         if let Some(win) = self.window.upgrade() {
             win.set_can_undo(self.history.can_undo());
             win.set_can_redo(self.history.can_redo());
+        }
+    }
+
+    /// Push the current license type and expiry to the UI.
+    ///
+    /// The UI only *reads* this state; it never validates the license itself.
+    fn update_license_display(&self) {
+        if let Some(win) = self.window.upgrade() {
+            let state = self.license.current_license();
+            let license_type_str = match state.license_type {
+                licensing::LicenseType::Personal => "Personal",
+                licensing::LicenseType::Commercial => "Commercial",
+                licensing::LicenseType::Trial => "Trial",
+                licensing::LicenseType::Enterprise => "Enterprise",
+            };
+            win.set_license_type(license_type_str.into());
+            let expiry = if matches!(
+                state.license_type,
+                licensing::LicenseType::Personal
+            ) {
+                // Personal has no meaningful expiry.
+                String::new()
+            } else {
+                state.expiry.format("%Y-%m-%d").to_string()
+            };
+            win.set_license_expiry(expiry.into());
         }
     }
 

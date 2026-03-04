@@ -6,5 +6,6 @@ members = [
     "pdf-annotations",
     "pdf-forms",
     "app-desktop",
+    "services/licensing",
 ]
 resolver = "2"

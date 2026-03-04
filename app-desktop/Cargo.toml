@@ -13,6 +13,7 @@ pdf-render   = { path = "../pdf-render" }
 pdf-editor   = { path = "../pdf-editor" }
 pdf-annotations = { path = "../pdf-annotations" }
 pdf-forms    = { path = "../pdf-forms" }
+licensing    = { path = "../services/licensing" }
 slint        = "1.9"
 tracing      = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
