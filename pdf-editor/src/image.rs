@@ -430,50 +430,91 @@ impl DocumentCommand for ReplaceImageCommand {
 
         // ----------------------------------------------------------------
         // 1. Find the Image XObject object ID via /Resources/XObject.
+        //    Walk the /Parent chain so that inherited resources are honored.
         // ----------------------------------------------------------------
         let img_obj_id: lopdf::ObjectId = {
             let inner = doc.inner();
-            inner
-                .get_object(page_id)
-                .ok()
-                .and_then(|o| o.as_dict().ok())
-                .and_then(|d| d.get(b"Resources").ok())
-                .and_then(|o| {
-                    if let Ok(res_id) = o.as_reference() {
-                        inner
-                            .get_object(res_id)
-                            .ok()
-                            .and_then(|ro| ro.as_dict().ok())
-                            .and_then(|d| d.get(b"XObject").ok())
-                            .cloned()
-                    } else {
-                        o.as_dict()
-                            .ok()
-                            .and_then(|d| d.get(b"XObject").ok())
-                            .cloned()
+            let mut current_id = page_id;
+            let mut found: Option<lopdf::ObjectId> = None;
+
+            // Walk up the page tree, honoring inherited /Resources.
+            loop {
+                // Get the current node dictionary.
+                let dict_opt = inner
+                    .get_object(current_id)
+                    .ok()
+                    .and_then(|o| o.as_dict().ok());
+                let dict = match dict_opt {
+                    Some(d) => d,
+                    None => break,
+                };
+
+                // Resolve /Resources, which may itself be an indirect reference.
+                let resources_dict_opt = dict
+                    .get(b"Resources")
+                    .ok()
+                    .and_then(|res_obj| {
+                        if let Ok(res_id) = res_obj.as_reference() {
+                            inner
+                                .get_object(res_id)
+                                .ok()
+                                .and_then(|ro| ro.as_dict().ok())
+                        } else {
+                            res_obj.as_dict().ok()
+                        }
+                    });
+
+                if let Some(resources_dict) = resources_dict_opt {
+                    // Resolve /XObject from the resources dictionary, handling
+                    // both direct and indirect forms.
+                    let xobject_dict_opt = resources_dict
+                        .get(b"XObject")
+                        .ok()
+                        .and_then(|xo_obj| {
+                            if let Ok(xo_id) = xo_obj.as_reference() {
+                                inner
+                                    .get_object(xo_id)
+                                    .ok()
+                                    .and_then(|ro| ro.as_dict().ok())
+                            } else {
+                                xo_obj.as_dict().ok()
+                            }
+                        });
+
+                    if let Some(xobject_dict) = xobject_dict_opt {
+                        // Look for the named image resource and resolve it to
+                        // an object reference.
+                        if let Ok(obj) = xobject_dict.get(&name_bytes) {
+                            if let Ok(img_id) = obj.as_reference() {
+                                found = Some(img_id);
+                                break;
+                            }
+                        }
                     }
-                })
-                .and_then(|xo| {
-                    if let Ok(xo_id) = xo.as_reference() {
-                        inner
-                            .get_object(xo_id)
-                            .ok()
-                            .and_then(|ro| ro.as_dict().ok())
-                            .and_then(|d| d.get(&name_bytes).ok())
-                            .and_then(|o| o.as_reference().ok())
-                    } else {
-                        xo.as_dict()
-                            .ok()
-                            .and_then(|d| d.get(&name_bytes).ok())
-                            .and_then(|o| o.as_reference().ok())
+                }
+
+                // Not found at this node; follow /Parent if present.
+                let next_id_opt = dict
+                    .get(b"Parent")
+                    .ok()
+                    .and_then(|p| p.as_reference().ok());
+
+                match next_id_opt {
+                    Some(parent_id) => {
+                        current_id = parent_id;
                     }
-                })
-                .ok_or_else(|| {
-                    PdfCoreError::InvalidArgument(format!(
-                        "image resource '{}' not found on page {}",
-                        self.resource_name, self.page_index
-                    ))
-                })?
+                    None => {
+                        break;
+                    }
+                }
+            }
+
+            found.ok_or_else(|| {
+                PdfCoreError::InvalidArgument(format!(
+                    "image resource '{}' not found on page {}",
+                    self.resource_name, self.page_index
+                ))
+            })?
         };
 
         // ----------------------------------------------------------------
