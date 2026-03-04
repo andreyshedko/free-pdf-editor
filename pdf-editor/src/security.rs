@@ -367,7 +367,7 @@ fn block_intersects_rect(block: &[Operation], rx: f32, ry: f32, rw: f32, rh: f32
 fn op_to_f32(obj: &Object) -> f32 {
     match obj {
         Object::Integer(i) => *i as f32,
-        Object::Real(r) => *r as f32,
+        Object::Real(r) => *r,
         _ => 0.0,
     }
 }

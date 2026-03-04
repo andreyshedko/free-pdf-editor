@@ -370,7 +370,6 @@ impl Document {
 mod tests {
     use super::*;
     use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
-    use std::io::Write;
     use tempfile::NamedTempFile;
 
     /// Build a minimal valid single-page PDF using lopdf and save to a temp file.

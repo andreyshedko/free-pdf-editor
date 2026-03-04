@@ -176,8 +176,7 @@ impl LicenseManager {
         let payload = build_payload(license)?;
 
         // Decode the base64 signature stored in the file.
-        let sig_bytes =
-            decode_base64(&license.signature).map_err(|e| LicenseError::InvalidBase64(e))?;
+        let sig_bytes = decode_base64(&license.signature).map_err(LicenseError::InvalidBase64)?;
         let sig_arr: [u8; 64] = sig_bytes
             .try_into()
             .map_err(|_| LicenseError::InvalidSignature)?;
@@ -288,7 +287,7 @@ fn serialise_sorted(val: &Value) -> Result<String, LicenseError> {
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("odd length hex string".into());
     }
     (0..s.len())

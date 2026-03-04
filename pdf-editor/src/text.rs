@@ -705,7 +705,7 @@ fn ensure_standard_font(
             }
         }
 
-        found.unwrap_or_else(lopdf::Dictionary::new)
+        found.unwrap_or_default()
     };
 
     // Get or create the /Font sub-dictionary, resolving indirect references.

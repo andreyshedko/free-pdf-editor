@@ -16,7 +16,7 @@ pub fn download_and_install(info: &UpdateInfo) -> Result<(), Box<dyn std::error:
     let filename = info
         .download_url
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("update_package");
     let dest: PathBuf = tmp.join(filename);
 

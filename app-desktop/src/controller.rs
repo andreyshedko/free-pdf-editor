@@ -51,6 +51,7 @@ pub struct AppController {
     cache: Arc<Mutex<PageCache>>,
     zoom: f32,
     current_page: u32,
+    #[allow(dead_code)]
     bus: EventBus,
     /// Licensing state – derived from cryptographic validation at startup.
     license: LicenseManager,

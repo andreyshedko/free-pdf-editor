@@ -26,6 +26,7 @@ pub struct InsertImageCommand {
 }
 
 impl InsertImageCommand {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_index: u32,
         data: Vec<u8>,
@@ -655,7 +656,7 @@ fn collect_content_ids_img(
 /// `resource_name_bytes`.  Only the scale components (a = display_width,
 /// d = display_height) are updated; translation (e, f) is preserved.
 fn update_cm_for_resource(
-    ops: &mut Vec<lopdf::content::Operation>,
+    ops: &mut [lopdf::content::Operation],
     resource_name_bytes: &[u8],
     new_display_width: Option<f32>,
     new_display_height: Option<f32>,

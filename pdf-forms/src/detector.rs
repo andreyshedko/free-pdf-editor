@@ -139,7 +139,7 @@ fn collect_fields(
                 .iter()
                 .filter_map(|o| match o {
                     Object::Integer(i) => Some(*i as f32),
-                    Object::Real(r) => Some(*r as f32),
+                    Object::Real(r) => Some(*r),
                     _ => None,
                 })
                 .collect();
