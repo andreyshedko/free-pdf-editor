@@ -459,24 +459,25 @@ App Store Connect.
 6. **Sign and package**
 
    ```bash
-   # Code-sign the .app bundle
+   # Code-sign the .app bundle for Mac App Store distribution
    export APPLE_CERT_BASE64="<base64 p12>"
    export APPLE_CERT_PASSWORD="<password>"
    export APPLE_TEAM_ID="<TEAMID>"
    export APPLE_SIGN_IDENTITY="Apple Distribution: Your Name (TEAMID)"
    bash scripts/sign_macos.sh
 
-   # Build the signed .pkg and submit for notarization
+   # Build a signed .pkg for Mac App Store submission (no notarization step here)
    export APPLE_INSTALLER_CERT_BASE64="<base64 installer p12>"
    export APPLE_INSTALLER_CERT_PASSWORD="<password>"
    export APPLE_INSTALLER_SIGN_IDENTITY="3rd Party Mac Developer Installer: Your Name (TEAMID)"
-   export APPLE_API_KEY_ID="<key id>"
-   export APPLE_API_ISSUER_ID="<issuer id>"
-   export APPLE_API_PRIVATE_KEY="$(cat /path/to/AuthKey_KEYID.p8)"
-   bash scripts/notarize_macos.sh
-   # Output: dist/macos/FreePDFEditor_<VERSION>.pkg
-   ```
 
+   # Example: create the installer package with productbuild
+   # (adjust paths / identifiers as needed)
+   security import <(echo "$APPLE_INSTALLER_CERT_BASE64" | base64 --decode) -P "$APPLE_INSTALLER_CERT_PASSWORD" -A
+   productbuild \
+     --component "dist/macos/FreePDFEditor.app" /Applications \
+     --sign "$APPLE_INSTALLER_SIGN_IDENTITY" \
+     "dist/macos/FreePDFEditor_<VERSION>.pkg"
 7. **Upload to App Store Connect** — use Apple's *Transporter* app
    ([download from Mac App Store](https://apps.apple.com/app/transporter/id1450874784))
    or its bundled CLI:
