@@ -48,7 +48,9 @@ impl InsertImageCommand {
             y,
             display_width,
             display_height,
-            resource_name: format!("Im{n}"),
+            // Use a less generic prefix to reduce the chance of colliding with
+            // existing XObject names like "Im1", "Im2" in the target PDF.
+            resource_name: format!("ImAuto{n}"),
             snapshot: None,
         }
     }
