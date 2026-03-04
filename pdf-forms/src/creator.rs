@@ -137,23 +137,47 @@ impl DocumentCommand for CreateFieldCommand {
         if let Some(af_id) = acroform_id {
             // AcroForm already exists — append to /Fields.
             let inner = doc.inner_mut();
-            let af_dict = inner
-                .get_object_mut(af_id)
-                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
-                .as_dict_mut()
-                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
-            match af_dict.get(b"Fields") {
-                Ok(Object::Array(existing)) => {
-                    let mut arr = existing.clone();
+            // First, inspect the existing /Fields entry without mutably borrowing
+            // the AcroForm dictionary, so we can safely resolve any references.
+            let fields_obj = inner
+                .get_object(af_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok())
+                .and_then(|d| d.get(b"Fields").ok().cloned());
+
+            match fields_obj {
+                // /AcroForm/Fields is a direct array — clone, append, and write back.
+                Some(Object::Array(mut arr)) => {
                     arr.push(Object::Reference(field_id));
-                    af_dict.set("Fields", Object::Array(arr));
+                    inner
+                        .get_object_mut(af_id)
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .as_dict_mut()
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .set("Fields", Object::Array(arr));
                 }
+                // /AcroForm/Fields is an indirect reference to an array — resolve
+                // and append to the underlying array without overwriting /Fields.
+                Some(Object::Reference(array_id)) => {
+                    inner
+                        .get_object_mut(array_id)
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .as_array_mut()
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .push(Object::Reference(field_id));
+                }
+                // No /Fields entry, or it is of an unexpected type — create a new array.
                 _ => {
-                    af_dict.set(
-                        "Fields",
-                        Object::Array(vec![Object::Reference(field_id)]),
-                    );
+                    inner
+                        .get_object_mut(af_id)
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .as_dict_mut()
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .set(
+                            "Fields",
+                            Object::Array(vec![Object::Reference(field_id)]),
+                        );
                 }
             }
         } else {
