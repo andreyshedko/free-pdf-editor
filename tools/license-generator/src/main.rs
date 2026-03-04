@@ -107,7 +107,13 @@ fn cmd_generate(args: &[String]) {
             }
             "--expiry" => {
                 i += 1;
-                expiry = require_arg(args, i, "--expiry");
+                let raw = require_arg(args, i, "--expiry");
+                // Validate the format matches what the verifier expects.
+                if chrono::NaiveDate::parse_from_str(&raw, "%Y-%m-%d").is_err() {
+                    eprintln!("--expiry must be in YYYY-MM-DD format (e.g. 2028-12-31)");
+                    process::exit(1);
+                }
+                expiry = raw;
             }
             other => {
                 eprintln!("Unknown argument: {other}");
@@ -261,28 +267,8 @@ fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
 }
 
 fn encode_base64(data: &[u8]) -> String {
-    const CHARS: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-        let combined = (b0 << 16) | (b1 << 8) | b2;
-        out.push(CHARS[((combined >> 18) & 0x3f) as usize] as char);
-        out.push(CHARS[((combined >> 12) & 0x3f) as usize] as char);
-        out.push(if chunk.len() > 1 {
-            CHARS[((combined >> 6) & 0x3f) as usize] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            CHARS[(combined & 0x3f) as usize] as char
-        } else {
-            '='
-        });
-    }
-    out
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    STANDARD.encode(data)
 }
 
 /// Builds the canonical JSON payload (all fields except `signature`), with
@@ -352,6 +338,7 @@ mod tests {
 
     #[test]
     fn generate_and_verify_signature() {
+        use base64::{engine::general_purpose::STANDARD, Engine};
         use ed25519_dalek::{Signer, SigningKey, Verifier};
         use rand::rngs::OsRng;
 
@@ -377,32 +364,8 @@ mod tests {
         let payload2 = build_payload(&license).unwrap();
         assert_eq!(payload, payload2, "payload must be stable after adding signature");
 
-        // Verify with the public key.
-        let sig_bytes: Vec<u8> = {
-            // inline minimal base64 decode for test
-            let s = license.signature.trim_end_matches('=');
-            const ALPHA: &[u8] =
-                b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-            let mut table = [0xffu8; 256];
-            for (i, &c) in ALPHA.iter().enumerate() {
-                table[c as usize] = i as u8;
-            }
-            let bytes = s.as_bytes();
-            let mut out = Vec::new();
-            for chunk in bytes.chunks(4) {
-                let b: Vec<u8> = chunk.iter().map(|&c| table[c as usize]).collect();
-                let combined = match b.len() {
-                    4 => (b[0] as u32) << 18 | (b[1] as u32) << 12 | (b[2] as u32) << 6 | b[3] as u32,
-                    3 => (b[0] as u32) << 18 | (b[1] as u32) << 12 | (b[2] as u32) << 6,
-                    2 => (b[0] as u32) << 18 | (b[1] as u32) << 12,
-                    _ => 0,
-                };
-                out.push((combined >> 16) as u8);
-                if b.len() >= 3 { out.push((combined >> 8) as u8); }
-                if b.len() == 4 { out.push(combined as u8); }
-            }
-            out
-        };
+        // Decode the base64 signature and verify it against the payload.
+        let sig_bytes = STANDARD.decode(&license.signature).unwrap();
         let arr: [u8; 64] = sig_bytes.try_into().unwrap();
         let signature = ed25519_dalek::Signature::from_bytes(&arr);
         assert!(verifying_key.verify(payload2.as_bytes(), &signature).is_ok());
