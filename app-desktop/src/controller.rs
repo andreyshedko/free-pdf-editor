@@ -5,7 +5,7 @@ use pdf_core::{
     event::{DocumentEvent, EventBus},
 };
 use pdf_editor::{DeletePageCommand, RotatePageCommand};
-use pdf_render::{CacheKey, PageCache, SoftwareRenderer};
+use pdf_render::{CacheKey, PageCache, RenderedPage, SoftwareRenderer};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
 use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
 use std::thread;
