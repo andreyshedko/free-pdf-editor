@@ -17,20 +17,15 @@ pub fn detect_form_fields(doc: &Document) -> Vec<FormField> {
     };
 
     let acroform = match &acroform_obj {
-        Object::Reference(id) => {
-            match inner.get_object(*id).ok().and_then(|o| o.as_dict().ok()) {
-                Some(d) => d.clone(),
-                None => return Vec::new(),
-            }
-        }
+        Object::Reference(id) => match inner.get_object(*id).ok().and_then(|o| o.as_dict().ok()) {
+            Some(d) => d.clone(),
+            None => return Vec::new(),
+        },
         Object::Dictionary(d) => d.clone(),
         _ => return Vec::new(),
     };
 
-    let fields_arr = match acroform.get(b"Fields")
-        .ok()
-        .and_then(|o| o.as_array().ok())
-    {
+    let fields_arr = match acroform.get(b"Fields").ok().and_then(|o| o.as_array().ok()) {
         Some(arr) => arr.clone(),
         None => return Vec::new(),
     };
@@ -58,7 +53,9 @@ fn collect_fields(
         None => return,
     };
 
-    let partial_name = dict.get(b"T").ok()
+    let partial_name = dict
+        .get(b"T")
+        .ok()
         .and_then(|o| o.as_str().ok())
         .map(|b| String::from_utf8_lossy(b).into_owned())
         .unwrap_or_default();
@@ -77,17 +74,25 @@ fn collect_fields(
         return;
     }
 
-    let ft = dict.get(b"FT").ok()
+    let ft = dict
+        .get(b"FT")
+        .ok()
         .and_then(|o| o.as_name().ok())
         .map(|b| String::from_utf8_lossy(b).into_owned())
         .unwrap_or_default();
     let kind = match ft.as_str() {
         "Tx" => FormFieldKind::TextField,
         "Btn" => {
-            let ff = dict.get(b"Ff").ok()
+            let ff = dict
+                .get(b"Ff")
+                .ok()
                 .and_then(|o| o.as_i64().ok())
                 .unwrap_or(0);
-            if ff & (1 << 15) != 0 { FormFieldKind::Radio } else { FormFieldKind::Checkbox }
+            if ff & (1 << 15) != 0 {
+                FormFieldKind::Radio
+            } else {
+                FormFieldKind::Checkbox
+            }
         }
         "Ch" => FormFieldKind::Dropdown,
         "Sig" => FormFieldKind::SignatureField,
@@ -96,21 +101,27 @@ fn collect_fields(
 
     let value = match &kind {
         FormFieldKind::TextField => {
-            let v = dict.get(b"V").ok()
+            let v = dict
+                .get(b"V")
+                .ok()
                 .and_then(|o| o.as_str().ok())
                 .map(|b| String::from_utf8_lossy(b).into_owned())
                 .unwrap_or_default();
             FormFieldValue::Text(v)
         }
         FormFieldKind::Checkbox | FormFieldKind::Radio => {
-            let v = dict.get(b"V").ok()
+            let v = dict
+                .get(b"V")
+                .ok()
                 .and_then(|o| o.as_name().ok())
                 .map(|b| String::from_utf8_lossy(b).into_owned())
                 .unwrap_or_else(|| "Off".to_owned());
             FormFieldValue::Boolean(v != "Off")
         }
         FormFieldKind::Dropdown => {
-            let v = dict.get(b"V").ok()
+            let v = dict
+                .get(b"V")
+                .ok()
                 .and_then(|o| o.as_str().ok())
                 .map(|b| String::from_utf8_lossy(b).into_owned())
                 .unwrap_or_default();
@@ -119,22 +130,39 @@ fn collect_fields(
         _ => FormFieldValue::None,
     };
 
-    let rect = dict.get(b"Rect").ok()
+    let rect = dict
+        .get(b"Rect")
+        .ok()
         .and_then(|o| o.as_array().ok())
         .and_then(|arr| {
-            let ns: Vec<f32> = arr.iter().filter_map(|o| match o {
-                Object::Integer(i) => Some(*i as f32),
-                Object::Real(r) => Some(*r as f32),
-                _ => None,
-            }).collect();
-            if ns.len() == 4 { Some([ns[0], ns[1], ns[2], ns[3]]) } else { None }
+            let ns: Vec<f32> = arr
+                .iter()
+                .filter_map(|o| match o {
+                    Object::Integer(i) => Some(*i as f32),
+                    Object::Real(r) => Some(*r as f32),
+                    _ => None,
+                })
+                .collect();
+            if ns.len() == 4 {
+                Some([ns[0], ns[1], ns[2], ns[3]])
+            } else {
+                None
+            }
         });
 
-    let options = dict.get(b"Opt").ok()
+    let options = dict
+        .get(b"Opt")
+        .ok()
         .and_then(|o| o.as_array().ok())
-        .map(|arr| arr.iter().filter_map(|o| {
-            o.as_str().ok().map(|b| String::from_utf8_lossy(b).into_owned())
-        }).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|o| {
+                    o.as_str()
+                        .ok()
+                        .map(|b| String::from_utf8_lossy(b).into_owned())
+                })
+                .collect()
+        })
         .unwrap_or_default();
 
     out.push(FormField {

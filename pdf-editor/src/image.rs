@@ -1,7 +1,6 @@
 use lopdf::{
     content::{Content, Operation},
-    dictionary,
-    Object, Stream,
+    dictionary, Object, Stream,
 };
 use pdf_core::{Document, DocumentCommand, PdfCoreError};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -94,7 +93,9 @@ impl DocumentCommand for InsertImageCommand {
             "ColorSpace"       => Object::Name(b"DeviceRGB".to_vec()),
             "BitsPerComponent" => Object::Integer(8),
         };
-        let img_id = doc.inner_mut().add_object(Stream::new(img_dict, self.data.clone()));
+        let img_id = doc
+            .inner_mut()
+            .add_object(Stream::new(img_dict, self.data.clone()));
 
         // 2. Build a content stream that draws the image.
         //
@@ -122,8 +123,9 @@ impl DocumentCommand for InsertImageCommand {
         let encoded = Content { operations: ops }
             .encode()
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
-        let content_id =
-            doc.inner_mut().add_object(Stream::new(lopdf::dictionary! {}, encoded));
+        let content_id = doc
+            .inner_mut()
+            .add_object(Stream::new(lopdf::dictionary! {}, encoded));
 
         // 3. Clone the page's existing Resources dict (if any), resolving
         // inherited resources from ancestor page tree nodes if needed.
@@ -175,8 +177,10 @@ impl DocumentCommand for InsertImageCommand {
         };
 
         // 4. Get or create the XObject sub-dictionary.
-        let xobject_ref: Option<lopdf::ObjectId> =
-            resources_dict.get(b"XObject").ok().and_then(|o| o.as_reference().ok());
+        let xobject_ref: Option<lopdf::ObjectId> = resources_dict
+            .get(b"XObject")
+            .ok()
+            .and_then(|o| o.as_reference().ok());
 
         let mut xobject_dict: lopdf::Dictionary = if let Some(xo_id) = xobject_ref {
             doc.inner()
@@ -240,8 +244,8 @@ impl DocumentCommand for InsertImageCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -309,7 +313,10 @@ mod tests {
             .and_then(|o| o.as_dict().ok())
             .and_then(|d| d.get(b"XObject").ok())
             .is_some();
-        assert!(has_xobject, "page should have an XObject resource after insert");
+        assert!(
+            has_xobject,
+            "page should have an XObject resource after insert"
+        );
         cmd.undo(&mut doc).expect("undo");
         assert_eq!(doc.page_count(), 1);
     }

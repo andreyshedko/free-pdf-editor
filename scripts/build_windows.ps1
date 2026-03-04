@@ -98,6 +98,27 @@ New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 & MakeAppx.exe pack /d $StageDir /p $MsixPath /l
 Write-Host "==> MSIX created: $MsixPath"
 
+# ── 5a. Sign MSIX package ────────────────────────────────────────────────────
+# MSIX packages must be signed before they can be installed locally.
+# For Microsoft Store submissions, Partner Center re-signs the package, so
+# this step can be skipped by setting SKIP_SIGNING=1.
+if ($Env:SKIP_SIGNING -ne "1") {
+    if (-not $Env:WINDOWS_CERT_BASE64) { throw "WINDOWS_CERT_BASE64 not set" }
+    [System.IO.File]::WriteAllBytes($CertPath, [Convert]::FromBase64String($Env:WINDOWS_CERT_BASE64))
+    try {
+        $KitsBase = "${Env:ProgramFiles(x86)}\Windows Kits\10\bin"
+        $SignTool = Get-ChildItem "$KitsBase\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+        if (-not $SignTool) { throw "signtool.exe not found under $KitsBase" }
+        & $SignTool sign /fd SHA256 /f $CertPath /p $Env:WINDOWS_CERT_PASSWORD /v $MsixPath 2>&1 |
+            Write-Host
+    } finally {
+        Remove-Item -Force $CertPath -ErrorAction SilentlyContinue
+    }
+    Write-Host "==> MSIX signed: $MsixPath"
+}
+
 # ── 6. Validate manifest ─────────────────────────────────────────────────────
 Write-Host "==> Validating AppxManifest..."
 [xml]$xml = Get-Content "$StageDir\AppxManifest.xml"

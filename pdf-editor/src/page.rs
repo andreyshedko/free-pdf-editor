@@ -8,19 +8,25 @@ pub struct DeletePageCommand {
 
 impl DeletePageCommand {
     pub fn new(page_index: u32) -> Self {
-        Self { page_index, snapshot: None }
+        Self {
+            page_index,
+            snapshot: None,
+        }
     }
 }
 
 fn snapshot_doc(doc: &mut Document) -> Result<Vec<u8>, PdfCoreError> {
     let mut buf = std::io::Cursor::new(Vec::new());
-    doc.inner_mut().save_to(&mut buf)
+    doc.inner_mut()
+        .save_to(&mut buf)
         .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
     Ok(buf.into_inner())
 }
 
 impl DocumentCommand for DeletePageCommand {
-    fn description(&self) -> &str { "Delete page" }
+    fn description(&self) -> &str {
+        "Delete page"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         self.snapshot = Some(snapshot_doc(doc)?);
@@ -29,8 +35,8 @@ impl DocumentCommand for DeletePageCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -45,16 +51,23 @@ pub struct RotatePageCommand {
 
 impl RotatePageCommand {
     pub fn new(page_index: u32, angle: i64) -> Self {
-        Self { page_index, angle, previous_angle: 0 }
+        Self {
+            page_index,
+            angle,
+            previous_angle: 0,
+        }
     }
 }
 
 impl DocumentCommand for RotatePageCommand {
-    fn description(&self) -> &str { "Rotate page" }
+    fn description(&self) -> &str {
+        "Rotate page"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let page = doc.get_page(self.page_index)?;
-        let current_rotation = doc.inner()
+        let current_rotation = doc
+            .inner()
             .get_object(page.object_id)
             .ok()
             .and_then(|o| o.as_dict().ok())
@@ -87,7 +100,9 @@ impl ReorderPagesCommand {
 }
 
 impl DocumentCommand for ReorderPagesCommand {
-    fn description(&self) -> &str { "Reorder pages" }
+    fn description(&self) -> &str {
+        "Reorder pages"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let n = doc.page_count() as usize;
@@ -109,12 +124,17 @@ pub struct MergeDocumentCommand {
 impl MergeDocumentCommand {
     pub fn new(other: Document) -> Self {
         let added_page_count = other.page_count();
-        Self { other, added_page_count }
+        Self {
+            other,
+            added_page_count,
+        }
     }
 }
 
 impl DocumentCommand for MergeDocumentCommand {
-    fn description(&self) -> &str { "Merge document" }
+    fn description(&self) -> &str {
+        "Merge document"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         doc.merge_document(&mut self.other)
@@ -130,13 +150,12 @@ impl DocumentCommand for MergeDocumentCommand {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
     use pdf_core::Document;
-    
+
     use tempfile::NamedTempFile;
 
     fn two_page_pdf() -> NamedTempFile {

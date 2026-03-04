@@ -22,11 +22,7 @@ pub trait RenderEngine: Send {
         zoom: f32,
     ) -> Result<RenderedPage, RenderError>;
 
-    fn get_text_boxes(
-        &self,
-        doc: &Document,
-        page_index: u32,
-    ) -> Result<Vec<TextBox>, RenderError>;
+    fn get_text_boxes(&self, doc: &Document, page_index: u32) -> Result<Vec<TextBox>, RenderError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,15 +88,20 @@ impl MuPdfRenderer {
         for y in 0..height as usize {
             for x in 0..width as usize {
                 let off = y * stride + x * 3;
-                data.push(samples[off]);      // R
-                data.push(samples[off + 1]);  // G
-                data.push(samples[off + 2]);  // B
-                data.push(255);              // A
+                data.push(samples[off]); // R
+                data.push(samples[off + 1]); // G
+                data.push(samples[off + 2]); // B
+                data.push(255); // A
             }
         }
 
         tracing::debug!(page_index, width, height, zoom, "page rasterized (mupdf)");
-        Ok(RenderedPage { data, width, height, page_index })
+        Ok(RenderedPage {
+            data,
+            width,
+            height,
+            page_index,
+        })
     }
 }
 
@@ -118,18 +119,12 @@ impl RenderEngine for MuPdfRenderer {
         zoom: f32,
     ) -> Result<RenderedPage, RenderError> {
         Self::render_from_path(&doc.path, page_index, zoom).or_else(|mupdf_err| {
-            tracing::debug!(
-                "MuPDF render failed ({mupdf_err}), falling back to software renderer"
-            );
+            tracing::debug!("MuPDF render failed ({mupdf_err}), falling back to software renderer");
             SoftwareRenderer.render_page(doc, page_index, zoom)
         })
     }
 
-    fn get_text_boxes(
-        &self,
-        doc: &Document,
-        page_index: u32,
-    ) -> Result<Vec<TextBox>, RenderError> {
+    fn get_text_boxes(&self, doc: &Document, page_index: u32) -> Result<Vec<TextBox>, RenderError> {
         let path_str = doc
             .path
             .to_str()
@@ -216,8 +211,19 @@ impl SoftwareRenderer {
             data[idx..idx + 4].copy_from_slice(&border_color);
         }
 
-        tracing::debug!(page_index, width, height, zoom, "page rasterized (software stub)");
-        Ok(RenderedPage { data, width, height, page_index })
+        tracing::debug!(
+            page_index,
+            width,
+            height,
+            zoom,
+            "page rasterized (software stub)"
+        );
+        Ok(RenderedPage {
+            data,
+            width,
+            height,
+            page_index,
+        })
     }
 }
 
@@ -237,12 +243,10 @@ impl RenderEngine for SoftwareRenderer {
         )
     }
 
-    fn get_text_boxes(
-        &self,
-        doc: &Document,
-        page_index: u32,
-    ) -> Result<Vec<TextBox>, RenderError> {
-        let text = doc.extract_text(page_index).map_err(RenderError::Document)?;
+    fn get_text_boxes(&self, doc: &Document, page_index: u32) -> Result<Vec<TextBox>, RenderError> {
+        let text = doc
+            .extract_text(page_index)
+            .map_err(RenderError::Document)?;
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }

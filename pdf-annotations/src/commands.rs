@@ -17,7 +17,9 @@ impl AddAnnotationCommand {
 }
 
 impl DocumentCommand for AddAnnotationCommand {
-    fn description(&self) -> &str { "Add annotation" }
+    fn description(&self) -> &str {
+        "Add annotation"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         write_annotation(doc, &mut self.annotation)?;
@@ -48,26 +50,37 @@ pub struct RemoveAnnotationCommand {
 
 impl RemoveAnnotationCommand {
     pub fn new(page_index: u32, annotation_id: AnnotationId) -> Self {
-        Self { page_index, annotation_id, removed_object_id: None }
+        Self {
+            page_index,
+            annotation_id,
+            removed_object_id: None,
+        }
     }
 }
 
 impl DocumentCommand for RemoveAnnotationCommand {
-    fn description(&self) -> &str { "Remove annotation" }
+    fn description(&self) -> &str {
+        "Remove annotation"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         // Record the annotation's ObjectId *before* removing it so undo can
         // re-attach the same object without recreating or cloning it.
-        self.removed_object_id = Some(
-            find_annotation_object_id(doc, self.page_index, &self.annotation_id)?
-        );
+        self.removed_object_id = Some(find_annotation_object_id(
+            doc,
+            self.page_index,
+            &self.annotation_id,
+        )?);
         remove_annotation(doc, self.page_index, &self.annotation_id)
     }
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         // `take()` clears removed_object_id so repeated undo calls cannot
         // insert duplicate references.
-        let obj_id = self.removed_object_id.take().ok_or(PdfCoreError::NotUndoable)?;
+        let obj_id = self
+            .removed_object_id
+            .take()
+            .ok_or(PdfCoreError::NotUndoable)?;
 
         let page = doc.get_page(self.page_index)?;
         let page_id = page.object_id;
@@ -100,14 +113,17 @@ mod tests {
     use crate::types::{AnnotationKind, Color, Rect};
     use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
     use pdf_core::Document;
-    
+
     use tempfile::NamedTempFile;
 
     fn minimal_pdf() -> NamedTempFile {
         let mut doc = LopdfDoc::with_version("1.7");
         let pages_id = doc.new_object_id();
         let page_id = doc.new_object_id();
-        let content = Stream::new(dictionary! {}, b"BT /F1 12 Tf 100 700 Td (Test) Tj ET".to_vec());
+        let content = Stream::new(
+            dictionary! {},
+            b"BT /F1 12 Tf 100 700 Td (Test) Tj ET".to_vec(),
+        );
         let content_id = doc.add_object(content);
         let page = lopdf::Object::Dictionary(dictionary! {
             "Type"     => Object::Name(b"Page".to_vec()),
@@ -142,8 +158,15 @@ mod tests {
     fn highlight(page: u32) -> Annotation {
         Annotation::new(
             page,
-            Rect { x: 72.0, y: 700.0, width: 200.0, height: 20.0 },
-            AnnotationKind::Highlight { color: Color::yellow() },
+            Rect {
+                x: 72.0,
+                y: 700.0,
+                width: 200.0,
+                height: 20.0,
+            },
+            AnnotationKind::Highlight {
+                color: Color::yellow(),
+            },
         )
     }
 
@@ -156,10 +179,16 @@ mod tests {
         let mut cmd = AddAnnotationCommand::new(ann);
         cmd.execute(&mut doc).expect("execute");
         let anns = read_annotations(&doc, 0);
-        assert!(anns.iter().any(|a| a.id == id), "annotation should be present after execute");
+        assert!(
+            anns.iter().any(|a| a.id == id),
+            "annotation should be present after execute"
+        );
         cmd.undo(&mut doc).expect("undo");
         let anns_after = read_annotations(&doc, 0);
-        assert!(!anns_after.iter().any(|a| a.id == id), "annotation should be gone after undo");
+        assert!(
+            !anns_after.iter().any(|a| a.id == id),
+            "annotation should be gone after undo"
+        );
     }
 
     #[test]
@@ -175,11 +204,17 @@ mod tests {
         let mut rm_cmd = RemoveAnnotationCommand::new(0, id.clone());
         rm_cmd.execute(&mut doc).expect("remove execute");
         let anns = read_annotations(&doc, 0);
-        assert!(!anns.iter().any(|a| a.id == id), "annotation should be absent after remove");
+        assert!(
+            !anns.iter().any(|a| a.id == id),
+            "annotation should be absent after remove"
+        );
 
         rm_cmd.undo(&mut doc).expect("remove undo");
         let anns_after = read_annotations(&doc, 0);
-        assert!(anns_after.iter().any(|a| a.id == id), "annotation should be restored after undo");
+        assert!(
+            anns_after.iter().any(|a| a.id == id),
+            "annotation should be restored after undo"
+        );
     }
 
     #[test]
@@ -199,7 +234,9 @@ mod tests {
         let mut doc = open_doc(&f);
         let ann = highlight(0);
         let id = ann.id.clone();
-        AddAnnotationCommand::new(ann).execute(&mut doc).expect("add");
+        AddAnnotationCommand::new(ann)
+            .execute(&mut doc)
+            .expect("add");
 
         let mut rm_cmd = RemoveAnnotationCommand::new(0, id.clone());
         rm_cmd.execute(&mut doc).expect("remove");

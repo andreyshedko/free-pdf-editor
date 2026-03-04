@@ -11,9 +11,17 @@ pub fn crash_dir() -> PathBuf {
 
 /// Install a panic hook that writes a `CrashReport` JSON file on every panic.
 ///
+/// The previous hook (Rust's default backtrace handler or any earlier hook) is
+/// captured via `take_hook()` and invoked **after** persisting the crash file,
+/// so normal panic output and backtraces are preserved.
+///
 /// Should be called once at application startup, before spawning any threads.
 pub fn install_panic_hook() {
-    std::panic::set_hook(Box::new(|info| {
+    // Capture (and remove) whatever hook is currently installed so we can
+    // chain into it after writing our crash file.
+    let previous_hook = std::panic::take_hook();
+
+    std::panic::set_hook(Box::new(move |info| {
         let thread = std::thread::current();
         let thread_name = thread.name().unwrap_or("<unnamed>").to_string();
 
@@ -41,8 +49,9 @@ pub fn install_panic_hook() {
             }
         }
 
-        // Print to stderr so the OS crash reporter still catches it.
-        eprintln!("CRASH [{}]: {}", report.app_version, report.panic_message);
+        // Invoke the previous hook so Rust's standard panic output / backtraces
+        // are still printed to stderr and the OS crash reporter can catch them.
+        previous_hook(info);
     }));
 }
 

@@ -1,4 +1,4 @@
-use crate::types::{Annotation, AnnotationKind, AnnotationId, Color, Rect};
+use crate::types::{Annotation, AnnotationId, AnnotationKind, Color, Rect};
 use lopdf::{Dictionary, Object, ObjectId};
 use pdf_core::{Document, PdfCoreError};
 use tracing::{debug, instrument};
@@ -21,7 +21,10 @@ pub fn write_annotation(
 
     let mut dict = Dictionary::new();
     dict.set("Type", Object::Name(b"Annot".to_vec()));
-    dict.set("Subtype", Object::Name(annotation.pdf_subtype().as_bytes().to_vec()));
+    dict.set(
+        "Subtype",
+        Object::Name(annotation.pdf_subtype().as_bytes().to_vec()),
+    );
     dict.set("Rect", rect);
     dict.set("NM", Object::string_literal(annotation.id.0.clone()));
 
@@ -37,13 +40,20 @@ pub fn write_annotation(
             dict.set("Contents", Object::string_literal(content.clone()));
             dict.set("Open", Object::Boolean(false));
         }
-        AnnotationKind::Drawing { color, line_width, points } => {
+        AnnotationKind::Drawing {
+            color,
+            line_width,
+            points,
+        } => {
             dict.set("C", color_array(color));
-            dict.set("BS", Object::Dictionary({
-                let mut bs = Dictionary::new();
-                bs.set("W", Object::Real(*line_width));
-                bs
-            }));
+            dict.set(
+                "BS",
+                Object::Dictionary({
+                    let mut bs = Dictionary::new();
+                    bs.set("W", Object::Real(*line_width));
+                    bs
+                }),
+            );
             let ink_list: Vec<Object> = points
                 .iter()
                 .flat_map(|(x, y)| [Object::Real(*x), Object::Real(*y)])
@@ -106,7 +116,9 @@ pub fn remove_annotation(
             if let Ok(obj) = inner.get_object(*ref_id) {
                 if let Ok(dict) = obj.as_dict() {
                     if let Ok(nm) = dict.get(b"NM") {
-                        let nm_str = nm.as_str().ok()
+                        let nm_str = nm
+                            .as_str()
+                            .ok()
                             .map(|b| String::from_utf8_lossy(b).into_owned())
                             .unwrap_or_default();
                         if nm_str == annotation_id.0 {
@@ -119,7 +131,8 @@ pub fn remove_annotation(
         }
     }
 
-    let target = target_id.ok_or_else(|| PdfCoreError::AnnotationNotFound(annotation_id.0.clone()))?;
+    let target =
+        target_id.ok_or_else(|| PdfCoreError::AnnotationNotFound(annotation_id.0.clone()))?;
 
     let new_annots: Vec<Object> = annots_arr
         .into_iter()
@@ -164,7 +177,9 @@ pub fn find_annotation_object_id(
             if let Ok(obj) = inner.get_object(*ref_id) {
                 if let Ok(dict) = obj.as_dict() {
                     if let Ok(nm) = dict.get(b"NM") {
-                        let nm_str = nm.as_str().ok()
+                        let nm_str = nm
+                            .as_str()
+                            .ok()
                             .map(|b| String::from_utf8_lossy(b).into_owned())
                             .unwrap_or_default();
                         if nm_str == annotation_id.0 {
@@ -210,33 +225,58 @@ pub fn read_annotations(doc: &Document, page_index: u32) -> Vec<Annotation> {
 }
 
 fn parse_annotation(dict: &Dictionary, page_index: u32, obj_id: ObjectId) -> Option<Annotation> {
-    let subtype = dict.get(b"Subtype").ok()?
-        .as_name().ok()
+    let subtype = dict
+        .get(b"Subtype")
+        .ok()?
+        .as_name()
+        .ok()
         .map(|b| String::from_utf8_lossy(b).into_owned())?;
     let rect_arr = dict.get(b"Rect").ok()?.as_array().ok()?;
-    let nums: Vec<f32> = rect_arr.iter().filter_map(|o| match o {
-        Object::Integer(i) => Some(*i as f32),
-        Object::Real(r)    => Some(*r),
-        _ => None,
-    }).collect();
-    if nums.len() < 4 { return None; }
-    let rect = Rect { x: nums[0], y: nums[1], width: nums[2] - nums[0], height: nums[3] - nums[1] };
+    let nums: Vec<f32> = rect_arr
+        .iter()
+        .filter_map(|o| match o {
+            Object::Integer(i) => Some(*i as f32),
+            Object::Real(r) => Some(*r),
+            _ => None,
+        })
+        .collect();
+    if nums.len() < 4 {
+        return None;
+    }
+    let rect = Rect {
+        x: nums[0],
+        y: nums[1],
+        width: nums[2] - nums[0],
+        height: nums[3] - nums[1],
+    };
 
-    let nm = dict.get(b"NM").ok()
+    let nm = dict
+        .get(b"NM")
+        .ok()
         .and_then(|o| o.as_str().ok())
         .map(|b| String::from_utf8_lossy(b).into_owned())
         .unwrap_or_else(|| format!("{}-{}", obj_id.0, obj_id.1));
 
     let kind = match subtype.as_str() {
-        "Highlight" => AnnotationKind::Highlight { color: Color::yellow() },
-        "Underline" => AnnotationKind::Underline { color: Color::black() },
-        "StrikeOut" => AnnotationKind::Strikeout { color: Color::red() },
+        "Highlight" => AnnotationKind::Highlight {
+            color: Color::yellow(),
+        },
+        "Underline" => AnnotationKind::Underline {
+            color: Color::black(),
+        },
+        "StrikeOut" => AnnotationKind::Strikeout {
+            color: Color::red(),
+        },
         "Text" => {
-            let content = dict.get(b"Contents").ok()
+            let content = dict
+                .get(b"Contents")
+                .ok()
                 .and_then(|o| o.as_str().ok())
                 .map(|b| String::from_utf8_lossy(b).into_owned())
                 .unwrap_or_default();
-            let author = dict.get(b"T").ok()
+            let author = dict
+                .get(b"T")
+                .ok()
                 .and_then(|o| o.as_str().ok())
                 .map(|b| String::from_utf8_lossy(b).into_owned())
                 .unwrap_or_default();
@@ -248,7 +288,9 @@ fn parse_annotation(dict: &Dictionary, page_index: u32, obj_id: ObjectId) -> Opt
             points: Vec::new(),
         },
         "Stamp" => {
-            let label = dict.get(b"Name").ok()
+            let label = dict
+                .get(b"Name")
+                .ok()
                 .and_then(|o| o.as_name().ok())
                 .map(|b| String::from_utf8_lossy(b).into_owned())
                 .unwrap_or_else(|| "Draft".to_owned());

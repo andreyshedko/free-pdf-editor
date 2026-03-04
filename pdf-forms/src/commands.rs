@@ -1,7 +1,4 @@
-use crate::{
-    detector::detect_form_fields,
-    types::FormFieldValue,
-};
+use crate::{detector::detect_form_fields, types::FormFieldValue};
 use lopdf::Object;
 use pdf_core::{Document, DocumentCommand, PdfCoreError};
 use tracing::debug;
@@ -24,7 +21,9 @@ impl SetFieldValueCommand {
 }
 
 impl DocumentCommand for SetFieldValueCommand {
-    fn description(&self) -> &str { "Set form field value" }
+    fn description(&self) -> &str {
+        "Set form field value"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let fields = detect_form_fields(doc);
@@ -41,7 +40,9 @@ impl DocumentCommand for SetFieldValueCommand {
 
         let new_obj = match &self.new_value {
             FormFieldValue::Text(s) => Object::string_literal(s.clone()),
-            FormFieldValue::Boolean(b) => Object::Name(if *b { b"Yes".to_vec() } else { b"Off".to_vec() }),
+            FormFieldValue::Boolean(b) => {
+                Object::Name(if *b { b"Yes".to_vec() } else { b"Off".to_vec() })
+            }
             FormFieldValue::Selected(s) => Object::string_literal(s.clone()),
             FormFieldValue::None => Object::Null,
         };
@@ -73,7 +74,9 @@ impl DocumentCommand for SetFieldValueCommand {
             .ok_or_else(|| PdfCoreError::FieldNotFound(self.field_name.clone()))?;
         let restored_obj = match &old {
             FormFieldValue::Text(s) => Object::string_literal(s.clone()),
-            FormFieldValue::Boolean(b) => Object::Name(if *b { b"Yes".to_vec() } else { b"Off".to_vec() }),
+            FormFieldValue::Boolean(b) => {
+                Object::Name(if *b { b"Yes".to_vec() } else { b"Off".to_vec() })
+            }
             FormFieldValue::Selected(s) => Object::string_literal(s.clone()),
             FormFieldValue::None => Object::Null,
         };
@@ -95,7 +98,7 @@ mod tests {
     use crate::types::FormFieldKind;
     use lopdf::{dictionary, Document as LopdfDoc, Object};
     use pdf_core::Document;
-    
+
     use tempfile::NamedTempFile;
 
     /// Build a minimal PDF with one AcroForm text field named "Name".
@@ -172,7 +175,10 @@ mod tests {
 
         cmd.undo(&mut doc).expect("undo");
         let fields_after = detect_form_fields(&doc);
-        let field_after = fields_after.iter().find(|f| f.name == "Name").expect("field");
+        let field_after = fields_after
+            .iter()
+            .find(|f| f.name == "Name")
+            .expect("field");
         assert_eq!(field_after.value, FormFieldValue::Text("".into()));
     }
 

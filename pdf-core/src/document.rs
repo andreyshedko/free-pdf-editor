@@ -3,7 +3,7 @@ use lopdf::{Document as LopdfDoc, Object};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use tracing::{instrument, info, debug};
+use tracing::{debug, info, instrument};
 
 pub use lopdf::ObjectId;
 
@@ -17,7 +17,12 @@ pub struct MediaBox {
 
 impl Default for MediaBox {
     fn default() -> Self {
-        Self { x: 0.0, y: 0.0, width: 595.28, height: 841.89 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: 595.28,
+            height: 841.89,
+        }
     }
 }
 
@@ -84,7 +89,12 @@ impl Document {
             .and_then(|s| s.to_str())
             .unwrap_or("untitled")
             .to_owned();
-        Ok(Self { id, title, path: path.to_path_buf(), inner })
+        Ok(Self {
+            id,
+            title,
+            path: path.to_path_buf(),
+            inner,
+        })
     }
 
     pub fn page_count(&self) -> u32 {
@@ -118,12 +128,18 @@ impl Document {
             .copied()
             .ok_or(PdfCoreError::PageOutOfRange(index))?;
         let media_box = self.get_media_box(obj_id).unwrap_or_default();
-        Ok(Page { index, object_id: obj_id, media_box })
+        Ok(Page {
+            index,
+            object_id: obj_id,
+            media_box,
+        })
     }
 
     pub fn extract_text(&self, page_index: u32) -> Result<String, PdfCoreError> {
         let page_num = page_index + 1;
-        let text = self.inner.extract_text(&[page_num])
+        let text = self
+            .inner
+            .extract_text(&[page_num])
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         Ok(text)
     }
@@ -137,7 +153,8 @@ impl Document {
     #[instrument(name = "document_save_as", skip(self), fields(path = %path.as_ref().display()))]
     pub fn save_to(&mut self, path: impl AsRef<Path>) -> Result<(), PdfCoreError> {
         let path = path.as_ref();
-        self.inner.save(path)
+        self.inner
+            .save(path)
             .map_err(|e| PdfCoreError::Save(format!("{}: {}", path.display(), e)))?;
         self.path = path.to_path_buf();
         info!(path = %path.display(), "document saved");
@@ -157,9 +174,9 @@ impl Document {
 
     pub fn rotate_page(&mut self, index: u32, angle: i64) -> Result<(), PdfCoreError> {
         if angle % 90 != 0 {
-            return Err(PdfCoreError::InvalidArgument(
-                format!("rotation angle must be a multiple of 90, got {angle}"),
-            ));
+            return Err(PdfCoreError::InvalidArgument(format!(
+                "rotation angle must be a multiple of 90, got {angle}"
+            )));
         }
         let count = self.page_count();
         if index >= count {
@@ -167,7 +184,8 @@ impl Document {
         }
         let page = self.get_page(index)?;
         let page_id = page.object_id;
-        let page_dict = self.inner
+        let page_dict = self
+            .inner
             .get_object_mut(page_id)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
             .as_dict_mut()
@@ -180,9 +198,11 @@ impl Document {
     pub fn reorder_pages(&mut self, new_order: &[u32]) -> Result<(), PdfCoreError> {
         let count = self.page_count() as usize;
         if new_order.len() != count {
-            return Err(PdfCoreError::InvalidArgument(
-                format!("new_order length {} != page_count {}", new_order.len(), count),
-            ));
+            return Err(PdfCoreError::InvalidArgument(format!(
+                "new_order length {} != page_count {}",
+                new_order.len(),
+                count
+            )));
         }
         // Collect current page object IDs in order
         let pages_map = self.inner.get_pages();
@@ -200,14 +220,18 @@ impl Document {
             .collect::<Result<Vec<_>, PdfCoreError>>()?;
         // Find the Pages node (parent) from catalog
         let pages_id = {
-            let catalog = self.inner.catalog()
+            let catalog = self
+                .inner
+                .catalog()
                 .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
-            catalog.get(b"Pages")
+            catalog
+                .get(b"Pages")
                 .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
                 .as_reference()
                 .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
         };
-        let pages_dict = self.inner
+        let pages_dict = self
+            .inner
             .get_object_mut(pages_id)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
             .as_dict_mut()
@@ -228,9 +252,9 @@ impl Document {
         fn remap_object(obj: Object, offset: u32) -> Object {
             match obj {
                 Object::Reference((n, g)) => Object::Reference((n + offset, g)),
-                Object::Array(arr) => Object::Array(
-                    arr.into_iter().map(|o| remap_object(o, offset)).collect(),
-                ),
+                Object::Array(arr) => {
+                    Object::Array(arr.into_iter().map(|o| remap_object(o, offset)).collect())
+                }
                 Object::Dictionary(mut dict) => {
                     for val in dict.iter_mut() {
                         let remapped = remap_object(std::mem::replace(val.1, Object::Null), offset);
@@ -250,7 +274,9 @@ impl Document {
         }
 
         // Copy all objects from other with remapped IDs and internal references
-        let other_objects: Vec<(ObjectId, Object)> = other.inner.objects
+        let other_objects: Vec<(ObjectId, Object)> = other
+            .inner
+            .objects
             .iter()
             .map(|(&id, obj)| (remap_id(id), remap_object(obj.clone(), id_offset)))
             .collect();
@@ -262,28 +288,35 @@ impl Document {
         self.inner.max_id += other.inner.max_id;
 
         // Get other's page IDs in self's namespace
-        let other_page_ids: Vec<ObjectId> = other.inner.get_pages()
+        let other_page_ids: Vec<ObjectId> = other
+            .inner
+            .get_pages()
             .values()
             .map(|&id| remap_id(id))
             .collect();
 
         // Get self's Pages node id
         let pages_id = {
-            let catalog = self.inner.catalog()
+            let catalog = self
+                .inner
+                .catalog()
                 .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
-            catalog.get(b"Pages")
+            catalog
+                .get(b"Pages")
                 .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
                 .as_reference()
                 .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
         };
 
         // Extend the Pages Kids array
-        let pages_dict = self.inner
+        let pages_dict = self
+            .inner
             .get_object_mut(pages_id)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
             .as_dict_mut()
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
-        let mut kids = pages_dict.get(b"Kids")
+        let mut kids = pages_dict
+            .get(b"Kids")
             .ok()
             .and_then(|o| o.as_array().ok())
             .cloned()
@@ -309,17 +342,18 @@ impl Document {
     fn get_media_box(&self, obj_id: ObjectId) -> Option<MediaBox> {
         let obj = self.inner.get_object(obj_id).ok()?;
         let dict = obj.as_dict().ok()?;
-        let arr = dict.get(b"MediaBox")
-            .ok()
-            .and_then(|o| o.as_array().ok())?;
+        let arr = dict.get(b"MediaBox").ok().and_then(|o| o.as_array().ok())?;
         if arr.len() < 4 {
             return None;
         }
-        let nums: Vec<f64> = arr.iter().filter_map(|o| match o {
-            Object::Integer(i) => Some(*i as f64),
-            Object::Real(r) => Some(*r as f64),
-            _ => None,
-        }).collect();
+        let nums: Vec<f64> = arr
+            .iter()
+            .filter_map(|o| match o {
+                Object::Integer(i) => Some(*i as f64),
+                Object::Real(r) => Some(*r as f64),
+                _ => None,
+            })
+            .collect();
         if nums.len() < 4 {
             return None;
         }
@@ -346,7 +380,10 @@ mod tests {
         let pages_id = doc.new_object_id();
         let page_id = doc.new_object_id();
 
-        let content_stream = Stream::new(dictionary! {}, b"BT /F1 12 Tf 100 700 Td (Hello, world!) Tj ET".to_vec());
+        let content_stream = Stream::new(
+            dictionary! {},
+            b"BT /F1 12 Tf 100 700 Td (Hello, world!) Tj ET".to_vec(),
+        );
         let content_id = doc.add_object(content_stream);
 
         let page = lopdf::Object::Dictionary(dictionary! {
@@ -395,7 +432,10 @@ mod tests {
     fn get_page_out_of_range_returns_error() {
         let f = minimal_pdf();
         let doc = Document::open(f.path()).expect("open");
-        assert!(matches!(doc.get_page(99), Err(PdfCoreError::PageOutOfRange(99))));
+        assert!(matches!(
+            doc.get_page(99),
+            Err(PdfCoreError::PageOutOfRange(99))
+        ));
     }
 
     #[test]
@@ -420,7 +460,10 @@ mod tests {
     fn delete_page_out_of_range_returns_error() {
         let f = minimal_pdf();
         let mut doc = Document::open(f.path()).expect("open");
-        assert!(matches!(doc.delete_page(5), Err(PdfCoreError::PageOutOfRange(5))));
+        assert!(matches!(
+            doc.delete_page(5),
+            Err(PdfCoreError::PageOutOfRange(5))
+        ));
     }
 
     #[test]

@@ -59,8 +59,12 @@ impl CommandHistory {
         Ok(())
     }
 
-    pub fn can_undo(&self) -> bool { !self.undo_stack.is_empty() }
-    pub fn can_redo(&self) -> bool { !self.redo_stack.is_empty() }
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
 
     pub fn undo_description(&self) -> Option<&str> {
         self.undo_stack.last().map(|c| c.description())
@@ -83,16 +87,24 @@ mod tests {
 
     /// A command that appends a marker to a vec (stored in doc title for testing).
     #[derive(Debug)]
-    struct AppendTitleCommand { suffix: String, prev: String }
+    struct AppendTitleCommand {
+        suffix: String,
+        prev: String,
+    }
 
     impl AppendTitleCommand {
         fn new(suffix: impl Into<String>) -> Self {
-            Self { suffix: suffix.into(), prev: String::new() }
+            Self {
+                suffix: suffix.into(),
+                prev: String::new(),
+            }
         }
     }
 
     impl DocumentCommand for AppendTitleCommand {
-        fn description(&self) -> &str { "Append title" }
+        fn description(&self) -> &str {
+            "Append title"
+        }
         fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
             self.prev = doc.title.clone();
             doc.title = format!("{}{}", doc.title, self.suffix);
@@ -115,7 +127,9 @@ mod tests {
         doc.title = "base".into();
         let mut history = CommandHistory::new(10);
 
-        history.execute(Box::new(AppendTitleCommand::new("_A")), &mut doc).unwrap();
+        history
+            .execute(Box::new(AppendTitleCommand::new("_A")), &mut doc)
+            .unwrap();
         assert_eq!(doc.title, "base_A");
         assert!(history.can_undo());
         assert!(!history.can_redo());
@@ -132,12 +146,16 @@ mod tests {
         doc.title = "base".into();
         let mut history = CommandHistory::new(10);
 
-        history.execute(Box::new(AppendTitleCommand::new("_A")), &mut doc).unwrap();
+        history
+            .execute(Box::new(AppendTitleCommand::new("_A")), &mut doc)
+            .unwrap();
         history.undo(&mut doc).unwrap();
         assert!(history.can_redo());
 
         // New execute clears redo
-        history.execute(Box::new(AppendTitleCommand::new("_B")), &mut doc).unwrap();
+        history
+            .execute(Box::new(AppendTitleCommand::new("_B")), &mut doc)
+            .unwrap();
         assert!(!history.can_redo());
         assert_eq!(doc.title, "base_B");
     }
@@ -146,14 +164,20 @@ mod tests {
     fn undo_on_empty_returns_error() {
         let mut doc = empty_doc();
         let mut history = CommandHistory::new(10);
-        assert!(matches!(history.undo(&mut doc), Err(PdfCoreError::NothingToUndo)));
+        assert!(matches!(
+            history.undo(&mut doc),
+            Err(PdfCoreError::NothingToUndo)
+        ));
     }
 
     #[test]
     fn redo_on_empty_returns_error() {
         let mut doc = empty_doc();
         let mut history = CommandHistory::new(10);
-        assert!(matches!(history.redo(&mut doc), Err(PdfCoreError::NothingToRedo)));
+        assert!(matches!(
+            history.redo(&mut doc),
+            Err(PdfCoreError::NothingToRedo)
+        ));
     }
 
     #[test]
@@ -163,7 +187,9 @@ mod tests {
         let mut history = CommandHistory::new(3);
 
         for i in 0..5u32 {
-            history.execute(Box::new(AppendTitleCommand::new(format!("{i}"))), &mut doc).unwrap();
+            history
+                .execute(Box::new(AppendTitleCommand::new(format!("{i}"))), &mut doc)
+                .unwrap();
         }
         assert_eq!(history.undo_stack.len(), 3);
     }

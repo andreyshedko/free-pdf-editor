@@ -28,7 +28,11 @@ pub fn license_file_path() -> Option<PathBuf> {
     {
         // Linux / other Unix
         if let Ok(config_dir) = std::env::var("XDG_CONFIG_HOME") {
-            Some(PathBuf::from(config_dir).join("pdfeditor").join("license.json"))
+            Some(
+                PathBuf::from(config_dir)
+                    .join("pdfeditor")
+                    .join("license.json"),
+            )
         } else {
             let home = std::env::var("HOME").ok()?;
             Some(
@@ -46,7 +50,11 @@ pub fn trial_start_file_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let base = std::env::var("APPDATA").ok()?;
-        Some(PathBuf::from(base).join("PdfEditor").join("trial_start.json"))
+        Some(
+            PathBuf::from(base)
+                .join("PdfEditor")
+                .join("trial_start.json"),
+        )
     }
     #[cfg(target_os = "macos")]
     {

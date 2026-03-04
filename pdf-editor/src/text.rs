@@ -1,5 +1,8 @@
+use lopdf::{
+    content::{Content, Operation},
+    Object, Stream,
+};
 use pdf_core::{Document, DocumentCommand, PdfCoreError};
-use lopdf::{content::{Content, Operation}, Object, Stream};
 
 #[derive(Debug)]
 pub struct InsertTextCommand {
@@ -25,11 +28,14 @@ impl InsertTextCommand {
 }
 
 impl DocumentCommand for InsertTextCommand {
-    fn description(&self) -> &str { "Insert text" }
+    fn description(&self) -> &str {
+        "Insert text"
+    }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let mut buf = std::io::Cursor::new(Vec::new());
-        doc.inner_mut().save_to(&mut buf)
+        doc.inner_mut()
+            .save_to(&mut buf)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         self.snapshot = Some(buf.into_inner());
 
@@ -38,28 +44,29 @@ impl DocumentCommand for InsertTextCommand {
 
         let ops = vec![
             Operation::new("BT", vec![]),
-            Operation::new("Tf", vec![
-                Object::Name(b"Helvetica".to_vec()),
-                Object::Real(self.font_size),
-            ]),
-            Operation::new("Td", vec![
-                Object::Real(self.x),
-                Object::Real(self.y),
-            ]),
+            Operation::new(
+                "Tf",
+                vec![
+                    Object::Name(b"Helvetica".to_vec()),
+                    Object::Real(self.font_size),
+                ],
+            ),
+            Operation::new("Td", vec![Object::Real(self.x), Object::Real(self.y)]),
             Operation::new("Tj", vec![Object::string_literal(self.text.clone())]),
             Operation::new("ET", vec![]),
         ];
         let content = Content { operations: ops };
-        let encoded = content.encode()
+        let encoded = content
+            .encode()
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
-        let new_stream_id = doc.inner_mut().add_object(Stream::new(
-            lopdf::dictionary! {},
-            encoded,
-        ));
+        let new_stream_id = doc
+            .inner_mut()
+            .add_object(Stream::new(lopdf::dictionary! {}, encoded));
 
         let inner = doc.inner_mut();
-        let page_dict = inner.get_object_mut(page_id)
+        let page_dict = inner
+            .get_object_mut(page_id)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
             .as_dict_mut()
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
@@ -72,10 +79,13 @@ impl DocumentCommand for InsertTextCommand {
             }
             Ok(Object::Reference(old_id)) => {
                 let old_id = *old_id;
-                page_dict.set("Contents", Object::Array(vec![
-                    Object::Reference(old_id),
-                    Object::Reference(new_stream_id),
-                ]));
+                page_dict.set(
+                    "Contents",
+                    Object::Array(vec![
+                        Object::Reference(old_id),
+                        Object::Reference(new_stream_id),
+                    ]),
+                );
             }
             _ => {
                 page_dict.set("Contents", Object::Reference(new_stream_id));
@@ -87,8 +97,8 @@ impl DocumentCommand for InsertTextCommand {
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
-        let restored = lopdf::Document::load_mem(snap)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let restored =
+            lopdf::Document::load_mem(snap).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         *doc.inner_mut() = restored;
         Ok(())
     }
@@ -99,7 +109,7 @@ mod tests {
     use super::*;
     use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
     use pdf_core::Document;
-    
+
     use tempfile::NamedTempFile;
 
     fn single_page_pdf() -> NamedTempFile {
