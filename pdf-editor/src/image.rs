@@ -577,17 +577,27 @@ fn collect_content_ids_img(
     inner: &lopdf::Document,
     page_id: lopdf::ObjectId,
 ) -> Vec<lopdf::ObjectId> {
-    let contents = inner
-        .get_object(page_id)
-        .ok()
-        .and_then(|o| o.as_dict().ok())
-        .and_then(|d| d.get(b"Contents").ok());
-    match contents {
-        Some(Object::Reference(id)) => vec![*id],
-        Some(Object::Array(arr)) => {
-            arr.iter().filter_map(|o| o.as_reference().ok()).collect()
-        }
-        _ => vec![],
+    // Look up the page dictionary and extract the /Contents entry, if any.
+    let page_obj = match inner.get_object(page_id) {
+        Ok(obj) => obj,
+        Err(_) => return Vec::new(),
+    };
+    let page_dict = match page_obj.as_dict() {
+        Ok(dict) => dict,
+        Err(_) => return Vec::new(),
+    };
+    let contents_obj = match page_dict.get(b"Contents") {
+        Ok(obj) => obj,
+        Err(_) => return Vec::new(),
+    };
+
+    match contents_obj {
+        Object::Reference(id) => vec![*id],
+        Object::Array(arr) => arr
+            .iter()
+            .filter_map(|o| o.as_reference().ok())
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
