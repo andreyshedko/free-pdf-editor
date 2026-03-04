@@ -5,39 +5,72 @@ use pdf_core::{
     event::{DocumentEvent, EventBus},
 };
 use pdf_editor::{DeletePageCommand, RotatePageCommand};
-use pdf_render::{PageCache, RenderEngine, SoftwareRenderer};
+use pdf_render::{CacheKey, MuPdfRenderer, PageCache, RenderedPage, SoftwareRenderer};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
-use std::sync::mpsc::Sender;
+use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::thread;
 
 use crate::AppWindow;
 
 const CACHE_CAPACITY: usize = 50;
 const HISTORY_DEPTH: usize = 100;
 
+/// A render task submitted to the background render worker.
+struct RenderTask {
+    doc_id: u64,
+    doc_path: std::path::PathBuf,
+    page_index: u32,
+    page_width: f64,
+    page_height: f64,
+    zoom: f32,
+    page_count: u32,
+    cache: Arc<Mutex<PageCache>>,
+    window: Weak<AppWindow>,
+    /// Shared generation counter.  The UI thread increments this whenever the
+    /// "desired" render target changes (page nav, zoom, open/close).
+    render_generation: Arc<AtomicU64>,
+    /// The generation value at the time this task was submitted.  If
+    /// `render_generation.load()` no longer equals `expected_generation` when
+    /// the render completes, the result is a stale frame and is discarded.
+    expected_generation: u64,
+}
+
+// `Weak<AppWindow>` is `Send` in Slint and `Arc<Mutex<PageCache>>` is
+// `Send + Sync`, so `RenderTask` derives `Send` automatically.
+
 pub struct AppController {
     window: Weak<AppWindow>,
     evt_tx: Sender<DocumentEvent>,
     document: Option<Document>,
     history: CommandHistory,
-    cache: PageCache,
-    renderer: SoftwareRenderer,
+    cache: Arc<Mutex<PageCache>>,
     zoom: f32,
     current_page: u32,
     bus: EventBus,
+    /// Channel to the background render worker thread.
+    render_tx: mpsc::SyncSender<RenderTask>,
+    /// Monotonically-increasing counter.  Incremented every time the desired
+    /// render target changes so background results for stale targets can be
+    /// detected and discarded before they reach the UI.
+    render_generation: Arc<AtomicU64>,
 }
 
 impl AppController {
     pub fn new(window: Weak<AppWindow>, evt_tx: Sender<DocumentEvent>) -> Self {
+        let cache = Arc::new(Mutex::new(PageCache::new(CACHE_CAPACITY)));
+        let render_tx = spawn_render_worker();
         Self {
             window,
             evt_tx,
             document: None,
             history: CommandHistory::new(HISTORY_DEPTH),
-            cache: PageCache::new(CACHE_CAPACITY),
-            renderer: SoftwareRenderer,
+            cache,
             zoom: 1.0,
             current_page: 0,
             bus: EventBus::new(),
+            render_tx,
+            render_generation: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -156,7 +189,7 @@ impl AppController {
                 self.document = Some(doc);
                 self.current_page = 0;
                 self.history.clear();
-                self.cache.evict_document(self.document.as_ref().unwrap().id);
+                self.cache.lock().expect("PageCache mutex was poisoned").evict_document(self.document.as_ref().unwrap().id);
                 self.render_current_page();
                 self.emit(DocumentEvent::DocumentOpened { title, page_count });
                 self.update_undo_redo_state();
@@ -201,7 +234,7 @@ impl AppController {
 
     fn close_document(&mut self) {
         if let Some(doc) = self.document.take() {
-            self.cache.evict_document(doc.id);
+            self.cache.lock().expect("PageCache mutex was poisoned").evict_document(doc.id);
         }
         self.current_page = 0;
         self.history.clear();
@@ -211,7 +244,7 @@ impl AppController {
     fn set_zoom(&mut self, zoom: f32) {
         let zoom = zoom.clamp(0.1, 10.0);
         if let Some(doc) = &self.document {
-            self.cache.evict_document(doc.id);
+            self.cache.lock().expect("PageCache mutex was poisoned").evict_document(doc.id);
         }
         self.zoom = zoom;
         self.render_current_page();
@@ -317,7 +350,7 @@ impl AppController {
             match self.history.execute(cmd, doc) {
                 Ok(()) => {
                     if let Some(ref doc) = self.document {
-                        self.cache.evict_document(doc.id);
+                        self.cache.lock().expect("PageCache mutex was poisoned").evict_document(doc.id);
                     }
                     self.render_current_page();
                     self.emit(DocumentEvent::PageRotated { index: page, angle: 90 });
@@ -333,41 +366,56 @@ impl AppController {
             Some(d) => (d.id, d.page_count()),
             None => return,
         };
-        if page_count == 0 { return; }
+        if page_count == 0 {
+            return;
+        }
         let page = self.current_page.min(page_count - 1);
+        let key = CacheKey::new(doc_id, page, self.zoom);
 
-        let key = pdf_render::types::CacheKey::new(doc_id, page, self.zoom);
-        if self.cache.get(&key).is_none() {
-            if let Some(doc) = &self.document {
-                match self.renderer.render_page(doc, page, self.zoom) {
-                    Ok(rendered) => {
-                        let k2 = pdf_render::types::CacheKey::new(doc_id, page, self.zoom);
-                        self.cache.insert(k2, rendered);
-                    }
-                    Err(e) => {
-                        self.emit(DocumentEvent::Error { message: e.to_string() });
-                        return;
-                    }
-                }
-            }
+        // Increment the generation so any in-flight renders for the old target
+        // can detect they are now stale and discard their results.
+        let gen = self.render_generation.fetch_add(1, Ordering::Relaxed) + 1;
+
+        // Fast path: serve from cache without touching the render thread.
+        let cached_page = {
+            let mut cache = self.cache.lock().expect("PageCache mutex was poisoned");
+            cache.get(&key).cloned()
+        };
+        if let Some(rendered) = cached_page {
+            apply_rendered_page(&rendered, &self.window, page, page_count);
+            return;
         }
 
-        let key = pdf_render::types::CacheKey::new(doc_id, page, self.zoom);
-        if let Some(rendered) = self.cache.get(&key) {
-            let w = rendered.width;
-            let h = rendered.height;
-            let data = rendered.data.clone();
-            let _ = rendered; // end borrow so we can use self.window below
-
-            let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(w, h);
-            buf.make_mut_bytes().copy_from_slice(&data);
-            let image = Image::from_rgba8(buf);
-
-            if let Some(win) = self.window.upgrade() {
-                win.set_page_image(image);
-                win.set_current_page(page as i32 + 1);
-                win.set_page_count(page_count as i32);
-            }
+        // Slow path: send to the background render worker.
+        if let Some(doc) = &self.document {
+            let page_obj = match doc.get_page(page) {
+                Ok(p) => p,
+                Err(e) => {
+                    self.emit(DocumentEvent::Error { message: e.to_string() });
+                    return;
+                }
+            };
+            let task = RenderTask {
+                doc_id,
+                doc_path: doc.path.clone(),
+                page_index: page,
+                page_width: page_obj.media_box.width,
+                page_height: page_obj.media_box.height,
+                zoom: self.zoom,
+                page_count,
+                cache: Arc::clone(&self.cache),
+                window: self.window.clone(),
+                render_generation: Arc::clone(&self.render_generation),
+                expected_generation: gen,
+            };
+            // Ensure the render task is eventually enqueued, even if the
+            // bounded channel is currently full. We perform the potentially
+            // blocking `send` on a short-lived background thread so the UI
+            // thread remains responsive.
+            let tx = self.render_tx.clone();
+            thread::spawn(move || {
+                let _ = tx.send(task);
+            });
         }
     }
 
@@ -380,5 +428,101 @@ impl AppController {
 
     fn emit(&self, event: DocumentEvent) {
         let _ = self.evt_tx.send(event);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Background render worker
+// ---------------------------------------------------------------------------
+
+/// Spawn a dedicated render worker thread and return a channel sender.
+///
+/// The worker receives [`RenderTask`]s, renders each page with
+/// [`MuPdfRenderer::render_from_path`] (which opens the PDF via MuPDF without
+/// requiring the lopdf `Document` object), then queues the result back onto
+/// the Slint event loop via [`slint::invoke_from_event_loop`].  This ensures
+/// the Slint UI thread is never blocked by rendering.
+///
+/// Falls back to [`SoftwareRenderer::render_from_dims`] when the document
+/// path does not yet exist on disk (e.g. an unsaved new document).
+fn spawn_render_worker() -> mpsc::SyncSender<RenderTask> {
+    // Capacity 4: old requests are dropped when full so the worker always
+    // processes the most recent navigation rather than queuing stale frames.
+    let (tx, rx) = mpsc::sync_channel::<RenderTask>(4);
+
+    thread::Builder::new()
+        .name("render-worker".into())
+        .spawn(move || {
+            for task in rx {
+                let result = MuPdfRenderer::render_from_path(
+                    &task.doc_path,
+                    task.page_index,
+                    task.zoom,
+                )
+                .or_else(|mupdf_err| {
+                    tracing::debug!(
+                        "MuPDF render failed ({mupdf_err}), falling back to software renderer"
+                    );
+                    SoftwareRenderer::render_from_dims(
+                        task.page_index,
+                        task.page_width,
+                        task.page_height,
+                        task.zoom,
+                    )
+                });
+
+                let rendered = match result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::warn!("render error: {e}");
+                        continue;
+                    }
+                };
+
+                // Store in the shared cache before invoking the UI callback.
+                let key = CacheKey::new(task.doc_id, task.page_index, task.zoom);
+                task.cache
+                    .lock()
+                    .expect("PageCache mutex was poisoned")
+                    .insert(key, rendered.clone());
+
+                // Hand the pixel buffer to the Slint event loop.
+                let win = task.window.clone();
+                let page_index = task.page_index;
+                let page_count = task.page_count;
+                let render_generation = Arc::clone(&task.render_generation);
+                let expected_generation = task.expected_generation;
+                slint::invoke_from_event_loop(move || {
+                    // If the UI has since requested a different page/zoom/doc,
+                    // the generation counter will have advanced beyond ours.
+                    // Discard stale frames to prevent them from overwriting the
+                    // current view.
+                    if render_generation.load(Ordering::Relaxed) == expected_generation {
+                        apply_rendered_page(&rendered, &win, page_index, page_count);
+                    }
+                })
+                .ok();
+            }
+        })
+        .expect("spawn render worker");
+
+    tx
+}
+
+/// Apply a finished [`RenderedPage`] to the Slint window.
+/// Must be called on the Slint UI thread.
+fn apply_rendered_page(
+    rendered: &RenderedPage,
+    window: &Weak<AppWindow>,
+    page_index: u32,
+    page_count: u32,
+) {
+    if let Some(win) = window.upgrade() {
+        let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(rendered.width, rendered.height);
+        buf.make_mut_bytes().copy_from_slice(&rendered.data);
+        let image = Image::from_rgba8(buf);
+        win.set_page_image(image);
+        win.set_current_page(page_index as i32 + 1);
+        win.set_page_count(page_count as i32);
     }
 }
