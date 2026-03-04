@@ -8,6 +8,7 @@ use pdf_editor::{DeletePageCommand, RotatePageCommand};
 use pdf_render::{CacheKey, MuPdfRenderer, PageCache, RenderedPage, SoftwareRenderer};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
 use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
 use crate::AppWindow;
@@ -26,6 +27,13 @@ struct RenderTask {
     page_count: u32,
     cache: Arc<Mutex<PageCache>>,
     window: Weak<AppWindow>,
+    /// Shared generation counter.  The UI thread increments this whenever the
+    /// "desired" render target changes (page nav, zoom, open/close).
+    render_generation: Arc<AtomicU64>,
+    /// The generation value at the time this task was submitted.  If
+    /// `render_generation.load()` no longer equals `expected_generation` when
+    /// the render completes, the result is a stale frame and is discarded.
+    expected_generation: u64,
 }
 
 // `Weak<AppWindow>` is `Send` in Slint and `Arc<Mutex<PageCache>>` is
@@ -42,6 +50,10 @@ pub struct AppController {
     bus: EventBus,
     /// Channel to the background render worker thread.
     render_tx: mpsc::SyncSender<RenderTask>,
+    /// Monotonically-increasing counter.  Incremented every time the desired
+    /// render target changes so background results for stale targets can be
+    /// detected and discarded before they reach the UI.
+    render_generation: Arc<AtomicU64>,
 }
 
 impl AppController {
@@ -58,6 +70,7 @@ impl AppController {
             current_page: 0,
             bus: EventBus::new(),
             render_tx,
+            render_generation: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -359,6 +372,10 @@ impl AppController {
         let page = self.current_page.min(page_count - 1);
         let key = CacheKey::new(doc_id, page, self.zoom);
 
+        // Increment the generation so any in-flight renders for the old target
+        // can detect they are now stale and discard their results.
+        let gen = self.render_generation.fetch_add(1, Ordering::Relaxed) + 1;
+
         // Fast path: serve from cache without touching the render thread.
         let cached_page = {
             let mut cache = self.cache.lock().expect("PageCache mutex was poisoned");
@@ -388,6 +405,8 @@ impl AppController {
                 page_count,
                 cache: Arc::clone(&self.cache),
                 window: self.window.clone(),
+                render_generation: Arc::clone(&self.render_generation),
+                expected_generation: gen,
             };
             // Ensure the render task is eventually enqueued, even if the
             // bounded channel is currently full. We perform the potentially
@@ -471,8 +490,16 @@ fn spawn_render_worker() -> mpsc::SyncSender<RenderTask> {
                 let win = task.window.clone();
                 let page_index = task.page_index;
                 let page_count = task.page_count;
+                let render_generation = Arc::clone(&task.render_generation);
+                let expected_generation = task.expected_generation;
                 slint::invoke_from_event_loop(move || {
-                    apply_rendered_page(&rendered, &win, page_index, page_count);
+                    // If the UI has since requested a different page/zoom/doc,
+                    // the generation counter will have advanced beyond ours.
+                    // Discard stale frames to prevent them from overwriting the
+                    // current view.
+                    if render_generation.load(Ordering::Relaxed) == expected_generation {
+                        apply_rendered_page(&rendered, &win, page_index, page_count);
+                    }
                 })
                 .ok();
             }

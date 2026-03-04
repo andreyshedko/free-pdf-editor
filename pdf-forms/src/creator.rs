@@ -95,23 +95,44 @@ impl DocumentCommand for CreateFieldCommand {
         // ---- Add widget to page /Annots --------------------------------
         {
             let inner = doc.inner_mut();
-            let page_dict = inner
-                .get_object_mut(page_id)
-                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
-                .as_dict_mut()
-                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
-            match page_dict.get(b"Annots") {
-                Ok(Object::Array(existing)) => {
-                    let mut arr = existing.clone();
+            // Inspect /Annots outside of any mutable borrow so we can handle
+            // both inline arrays and indirect references cleanly.
+            let annots_state = inner
+                .get_object(page_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok())
+                .and_then(|d| d.get(b"Annots").ok().cloned());
+
+            match annots_state {
+                Some(Object::Array(mut arr)) => {
+                    // Direct inline array — append and write back.
                     arr.push(Object::Reference(field_id));
-                    page_dict.set("Annots", Object::Array(arr));
+                    inner
+                        .get_object_mut(page_id)
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .as_dict_mut()
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .set("Annots", Object::Array(arr));
+                }
+                Some(Object::Reference(array_id)) => {
+                    // Indirect reference to an existing array — append to it
+                    // without overwriting /Annots (preserves existing annotations).
+                    inner
+                        .get_object_mut(array_id)
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .as_array_mut()
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .push(Object::Reference(field_id));
                 }
                 _ => {
-                    page_dict.set(
-                        "Annots",
-                        Object::Array(vec![Object::Reference(field_id)]),
-                    );
+                    // No /Annots or unexpected type — create a new inline array.
+                    inner
+                        .get_object_mut(page_id)
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .as_dict_mut()
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                        .set("Annots", Object::Array(vec![Object::Reference(field_id)]));
                 }
             }
         }
