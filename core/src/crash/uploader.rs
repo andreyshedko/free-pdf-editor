@@ -12,7 +12,7 @@ use tracing::{debug, warn};
 
 /// Endpoint where crash reports are posted.
 /// Override at compile time via `CRASH_ENDPOINT` env (set in `build.rs`).
-const CRASH_ENDPOINT: &str = env!("CRASH_ENDPOINT");
+const CRASH_ENDPOINT: &str = option_env!("CRASH_ENDPOINT").unwrap_or("");
 
 /// Upload all pending crash report files from the crash directory.
 ///
