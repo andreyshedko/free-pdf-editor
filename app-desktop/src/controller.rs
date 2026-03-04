@@ -5,7 +5,7 @@ use pdf_core::{
     event::{DocumentEvent, EventBus},
 };
 use pdf_editor::{DeletePageCommand, RotatePageCommand};
-use pdf_render::{CacheKey, PageCache, RenderedPage, SoftwareRenderer};
+use pdf_render::{CacheKey, MuPdfRenderer, PageCache, RenderedPage, SoftwareRenderer};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
 use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
 use std::thread;
@@ -18,6 +18,7 @@ const HISTORY_DEPTH: usize = 100;
 /// A render task submitted to the background render worker.
 struct RenderTask {
     doc_id: u64,
+    doc_path: std::path::PathBuf,
     page_index: u32,
     page_width: f64,
     page_height: f64,
@@ -379,6 +380,7 @@ impl AppController {
             };
             let task = RenderTask {
                 doc_id,
+                doc_path: doc.path.clone(),
                 page_index: page,
                 page_width: page_obj.media_box.width,
                 page_height: page_obj.media_box.height,
@@ -417,10 +419,13 @@ impl AppController {
 /// Spawn a dedicated render worker thread and return a channel sender.
 ///
 /// The worker receives [`RenderTask`]s, renders each page with
-/// [`SoftwareRenderer::render_from_dims`] (which does not require access to
-/// the `Document` object), then queues the result back onto the Slint event
-/// loop via [`slint::invoke_from_event_loop`].  This ensures the Slint UI
-/// thread is never blocked by rendering.
+/// [`MuPdfRenderer::render_from_path`] (which opens the PDF via MuPDF without
+/// requiring the lopdf `Document` object), then queues the result back onto
+/// the Slint event loop via [`slint::invoke_from_event_loop`].  This ensures
+/// the Slint UI thread is never blocked by rendering.
+///
+/// Falls back to [`SoftwareRenderer::render_from_dims`] when the document
+/// path does not yet exist on disk (e.g. an unsaved new document).
 fn spawn_render_worker() -> mpsc::SyncSender<RenderTask> {
     // Capacity 4: old requests are dropped when full so the worker always
     // processes the most recent navigation rather than queuing stale frames.
@@ -430,12 +435,22 @@ fn spawn_render_worker() -> mpsc::SyncSender<RenderTask> {
         .name("render-worker".into())
         .spawn(move || {
             for task in rx {
-                let result = SoftwareRenderer::render_from_dims(
+                let result = MuPdfRenderer::render_from_path(
+                    &task.doc_path,
                     task.page_index,
-                    task.page_width,
-                    task.page_height,
                     task.zoom,
-                );
+                )
+                .or_else(|mupdf_err| {
+                    tracing::debug!(
+                        "MuPDF render failed ({mupdf_err}), falling back to software renderer"
+                    );
+                    SoftwareRenderer::render_from_dims(
+                        task.page_index,
+                        task.page_width,
+                        task.page_height,
+                        task.zoom,
+                    )
+                });
 
                 let rendered = match result {
                     Ok(r) => r,

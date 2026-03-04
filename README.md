@@ -1,6 +1,6 @@
 # Free PDF Editor (Desktop)
 
-Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** UI, and **lopdf**.
+Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** UI, **lopdf** (document model), and **MuPDF** (rendering).
 
 ## Implemented functionality
 
@@ -17,7 +17,8 @@ Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** U
 - Plugin trait (`Plugin`) for future extension points
 
 ### Page rendering (`pdf-render`)
-- `SoftwareRenderer` — pure-Rust rasterizer that renders page bitmaps (RGBA8)
+- `MuPdfRenderer` — **MuPDF-backed rasterizer** that renders real page bitmaps (RGBA8) via `libmupdf`; extracts per-block text bounding boxes; falls back to `SoftwareRenderer` for unsaved in-memory documents
+- `SoftwareRenderer` — pure-Rust fallback that produces a white rectangle with a border (used in tests and for unsaved documents)
   with a visible border; zoom range 0.1 × – 10 ×
 - `PageCache` — LRU cache keyed by `(document_id, page_index, zoom)` with
   per-document eviction
@@ -88,7 +89,7 @@ UI thread (Slint event loop)
       ▼
 AppController  ──render request──►  render-worker thread
       │                                    │
-      │                          SoftwareRenderer::render_from_dims
+      │                          MuPdfRenderer::render_from_path
       │                          Arc<Mutex<PageCache>>
       │                                    │
       │◄──invoke_from_event_loop───────────┘
@@ -100,14 +101,12 @@ event-bridge thread  ──invoke_from_event_loop──►  UI thread
 
 The Slint UI thread never blocks on rendering. Page rendering is dispatched to
 a dedicated `render-worker` thread via a bounded channel.  The worker calls
-`SoftwareRenderer::render_from_dims` (which takes only page dimensions, not the
-full `Document`), stores the result in a shared `Arc<Mutex<PageCache>>`, then
-delivers the pixel buffer back to the Slint event loop via
-`invoke_from_event_loop`.  All PDF operations run on the UI thread (the
-`Document` is not shared with the render thread, which is the right design for
-future MuPDF integration where the document handle must be kept thread-local).
-The event bridge thread forwards `DocumentEvent` messages back to the Slint
-event loop so state updates happen safely on the UI thread.
+`MuPdfRenderer::render_from_path`, which opens its own `mupdf::Document` handle
+per render call so no document handle is shared across threads.  Results are
+stored in a shared `Arc<Mutex<PageCache>>` then delivered back to the Slint
+event loop via `invoke_from_event_loop`.  The event bridge thread forwards
+`DocumentEvent` messages back to the Slint event loop so state updates happen
+safely on the UI thread.
 
 ## Stack
 
@@ -115,7 +114,7 @@ event loop so state updates happen safely on the UI thread.
 |-------|------------|
 | Language | Rust (edition 2021) |
 | UI | [Slint](https://slint.dev) 1.9 |
-| PDF library | [lopdf](https://crates.io/crates/lopdf) 0.39 |
+| PDF library | [lopdf](https://crates.io/crates/lopdf) 0.39 (document model) · [MuPDF](https://mupdf.com/) 1.23 via [mupdf](https://crates.io/crates/mupdf) 0.6 (rendering) |
 | Build | Cargo workspace |
 | Targets | Windows · macOS · Linux |
 
@@ -123,7 +122,7 @@ event loop so state updates happen safely on the UI thread.
 
 ```
 pdf-core          ← Document model, CommandHistory, EventBus, OCR/Plugin traits
-pdf-render        ← SoftwareRenderer, PageCache, TextBox
+pdf-render        ← MuPdfRenderer, SoftwareRenderer (fallback), PageCache, TextBox
 pdf-editor        ← Page / text / security editing commands
 pdf-annotations   ← Annotation CRUD commands + PDF I/O
 pdf-forms         ← AcroForm field detection, value commands, JSON export
@@ -207,12 +206,12 @@ current implementation status.
 
 | Requirement | Status | Notes |
 |-------------|:------:|-------|
-| Page rasterization | ⚠️ Stub | `SoftwareRenderer` produces a white rectangle with a border — no real pixel rendering. **MuPDF integration is not yet done.** |
+| Page rasterization | ✅ | `MuPdfRenderer::render_from_path` opens a `mupdf::Document`, calls `page.to_pixmap()`, and converts the RGB pixmap to RGBA8. |
 | Zoom levels | ✅ | 0.1 × – 10 × |
 | LRU page cache | ✅ | Keyed by `(doc_id, page, zoom)`; shared via `Arc<Mutex<PageCache>>` with the render worker |
-| Text extraction | ✅ | Via lopdf |
+| Text extraction | ✅ | Via lopdf (command layer) and MuPDF `TextPage` blocks (renderer) |
 | Coordinate mapping | ✅ | `MediaBox`-based |
-| MuPDF as rendering backend | ❌ Not started | The specification lists MuPDF as the rendering library. Currently lopdf is used for document parsing and the renderer is a software stub. |
+| MuPDF as rendering backend | ✅ | `MuPdfRenderer` uses `mupdf` 0.6 (wraps libmupdf 1.23) for rasterization and text-box extraction. lopdf is retained for document editing commands. |
 
 ### Document engine
 
@@ -273,7 +272,7 @@ current implementation status.
 | Requirement | Status | Notes |
 |-------------|:------:|-------|
 | Memory-safe LRU cache | ✅ | |
-| Background rendering (off UI thread) | ✅ | Dedicated `render-worker` thread; `SoftwareRenderer::render_from_dims` runs off the UI thread; results are handed back via `slint::invoke_from_event_loop`. The cache is shared via `Arc<Mutex<PageCache>>`. |
+| Background rendering (off UI thread) | ✅ | Dedicated `render-worker` thread; `MuPdfRenderer::render_from_path` runs off the UI thread; results are handed back via `slint::invoke_from_event_loop`. The cache is shared via `Arc<Mutex<PageCache>>`. |
 | Lazy page loading | ❌ Not started | `Document::open` loads the full lopdf object graph at open time. |
 | `<100 ms` page navigation latency | ❌ Not measured | Achievable with real rendering (MuPDF) once integrated. |
 | Incremental saves | ❌ Not started | See document engine row above. |
