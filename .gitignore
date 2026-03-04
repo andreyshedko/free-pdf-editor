@@ -1,2 +1,10 @@
 /target
 Cargo.lock
+
+# Build outputs (dist kept for .gitkeep only)
+dist/windows/*.msix
+dist/windows/*.sha256
+dist/macos/*.pkg
+dist/macos/*.sha256
+dist/macos/*.app
+dist/macos/*-universal
