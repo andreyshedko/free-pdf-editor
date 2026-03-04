@@ -386,9 +386,14 @@ impl AppController {
                 cache: Arc::clone(&self.cache),
                 window: self.window.clone(),
             };
-            // `try_send` drops the task if the worker queue is full, which is
-            // fine — the in-flight render will still complete shortly.
-            let _ = self.render_tx.try_send(task);
+            // Ensure the render task is eventually enqueued, even if the
+            // bounded channel is currently full. We perform the potentially
+            // blocking `send` on a short-lived background thread so the UI
+            // thread remains responsive.
+            let tx = self.render_tx.clone();
+            thread::spawn(move || {
+                let _ = tx.send(task);
+            });
         }
     }
 
