@@ -53,9 +53,9 @@ sed \
   -e "s/__SHORT_VERSION__/$SHORT_VERSION/g" \
   "platform/macos/Info.plist.template" > "$CONTENTS/Info.plist"
 
-# Copy icons if available
-if [ -f "assets/icon-150.png" ]; then
-  cp "assets/icon-150.png" "$CONTENTS/Resources/AppIcon.png"
+# Copy .icns app icon if available (used by CFBundleIconFile in Info.plist)
+if [ -f "assets/AppIcon.icns" ]; then
+  cp "assets/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
 fi
 
 echo "==> .app bundle assembled: $APP_BUNDLE"
