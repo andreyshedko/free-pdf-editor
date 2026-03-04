@@ -361,7 +361,7 @@ impl AppController {
 
         // Fast path: serve from cache without touching the render thread.
         let cached_page = {
-            let cache = self.cache.lock().expect("PageCache mutex was poisoned");
+            let mut cache = self.cache.lock().expect("PageCache mutex was poisoned");
             cache.get(&key).cloned()
         };
         if let Some(rendered) = cached_page {
