@@ -31,19 +31,22 @@ pub trait RenderEngine: Send {
 
 pub struct SoftwareRenderer;
 
-impl RenderEngine for SoftwareRenderer {
-    fn render_page(
-        &self,
-        doc: &Document,
+impl SoftwareRenderer {
+    /// Render a page given only its physical dimensions (in PDF user units) and
+    /// the desired zoom factor.  This method is `Send`-safe because it does not
+    /// require access to the `Document` object, making it suitable for use on
+    /// background render threads.
+    pub fn render_from_dims(
         page_index: u32,
+        page_width: f64,
+        page_height: f64,
         zoom: f32,
     ) -> Result<RenderedPage, RenderError> {
         if zoom <= 0.0 || zoom > 10.0 {
             return Err(RenderError::InvalidZoom(zoom));
         }
-        let page = doc.get_page(page_index).map_err(RenderError::Document)?;
-        let width = (page.media_box.width * zoom as f64).round() as u32;
-        let height = (page.media_box.height * zoom as f64).round() as u32;
+        let width = (page_width * zoom as f64).round() as u32;
+        let height = (page_height * zoom as f64).round() as u32;
         let width = width.max(1);
         let height = height.max(1);
 
@@ -65,6 +68,23 @@ impl RenderEngine for SoftwareRenderer {
 
         tracing::debug!(page_index, width, height, zoom, "page rasterized (software)");
         Ok(RenderedPage { data, width, height, page_index })
+    }
+}
+
+impl RenderEngine for SoftwareRenderer {
+    fn render_page(
+        &self,
+        doc: &Document,
+        page_index: u32,
+        zoom: f32,
+    ) -> Result<RenderedPage, RenderError> {
+        let page = doc.get_page(page_index).map_err(RenderError::Document)?;
+        Self::render_from_dims(
+            page_index,
+            page.media_box.width,
+            page.media_box.height,
+            zoom,
+        )
     }
 
     fn get_text_boxes(

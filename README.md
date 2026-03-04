@@ -31,8 +31,9 @@ Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** U
 | `ReorderPagesCommand` | Reorder all pages by a new index mapping | ✓ |
 | `MergeDocumentCommand` | Append all pages from another document | ✓ |
 | `InsertTextCommand` | Add text at a specified position on a page (Helvetica, configurable size) | ✓ (snapshot) |
+| `InsertImageCommand` | Embed a raw RGB bitmap as an uncompressed PDF Image XObject at a given position and display size | ✓ (snapshot) |
 | `SetPasswordCommand` | Placeholder for owner-password protection | ✓ (snapshot) |
-| `RedactRegionCommand` | Paint a filled black rectangle over a page region | ✓ (snapshot) |
+| `RedactRegionCommand` | Permanently remove text content within a region from the content streams and paint a filled black rectangle over it | ✓ (snapshot) |
 
 ### Annotations (`pdf-annotations`)
 Annotation types supported: **Highlight**, **Underline**, **Strikeout**,
@@ -52,6 +53,8 @@ provided in `pdf_annotations::io`.
 - `detect_form_fields` — walks the AcroForm tree and returns all fields
   (text fields, checkboxes, radio buttons, dropdowns, signature fields)
   with their names, types, current values, page locations, and option lists
+- `CreateFieldCommand` — create a new AcroForm field (any `FormFieldKind`) on a page,
+  automatically creating the `/AcroForm` catalog entry if absent; undo supported
 - `SetFieldValueCommand` — update a field's `/V` entry with undo support
 - `export_form_data` — serialize all field values to a JSON object
 
@@ -83,17 +86,26 @@ status message (errors, zoom level, save path, etc.).
 UI thread (Slint event loop)
       │  callbacks
       ▼
-AppController  ──render──►  SoftwareRenderer
-      │                          │
-      │                          ▼
-      │                      PageCache (LRU)
+AppController  ──render request──►  render-worker thread
+      │                                    │
+      │                          SoftwareRenderer::render_from_dims
+      │                          Arc<Mutex<PageCache>>
+      │                                    │
+      │◄──invoke_from_event_loop───────────┘
       │
       │  DocumentEvent
       ▼
 event-bridge thread  ──invoke_from_event_loop──►  UI thread
 ```
 
-All PDF operations run on the UI thread (single-threaded for simplicity).
+The Slint UI thread never blocks on rendering. Page rendering is dispatched to
+a dedicated `render-worker` thread via a bounded channel.  The worker calls
+`SoftwareRenderer::render_from_dims` (which takes only page dimensions, not the
+full `Document`), stores the result in a shared `Arc<Mutex<PageCache>>`, then
+delivers the pixel buffer back to the Slint event loop via
+`invoke_from_event_loop`.  All PDF operations run on the UI thread (the
+`Document` is not shared with the render thread, which is the right design for
+future MuPDF integration where the document handle must be kept thread-local).
 The event bridge thread forwards `DocumentEvent` messages back to the Slint
 event loop so state updates happen safely on the UI thread.
 
@@ -168,13 +180,13 @@ requires a display and fontconfig on Linux):
 cargo test -p pdf-core -p pdf-render -p pdf-editor -p pdf-annotations -p pdf-forms
 ```
 
-Tests cover (27 tests total):
+Tests cover (40 tests total):
 
 - `pdf-core` — document open/save/page operations, `CommandHistory` undo/redo semantics
 - `pdf-render` — LRU cache eviction and per-document cache eviction
-- `pdf-editor` — delete/rotate/reorder/insert-text execute-and-undo, out-of-range errors
+- `pdf-editor` — delete/rotate/reorder/insert-text/insert-image execute-and-undo, redaction removes text in region, out-of-range errors
 - `pdf-annotations` — add/remove annotation execute-and-undo, idempotent undo guard
-- `pdf-forms` — AcroForm field detection, `SetFieldValueCommand` execute-and-undo
+- `pdf-forms` — AcroForm field detection, `SetFieldValueCommand` execute-and-undo, `CreateFieldCommand` (all field kinds, multi-field, undo)
 
 ## Extensibility
 
@@ -197,7 +209,7 @@ current implementation status.
 |-------------|:------:|-------|
 | Page rasterization | ⚠️ Stub | `SoftwareRenderer` produces a white rectangle with a border — no real pixel rendering. **MuPDF integration is not yet done.** |
 | Zoom levels | ✅ | 0.1 × – 10 × |
-| LRU page cache | ✅ | Keyed by `(doc_id, page, zoom)` |
+| LRU page cache | ✅ | Keyed by `(doc_id, page, zoom)`; shared via `Arc<Mutex<PageCache>>` with the render worker |
 | Text extraction | ✅ | Via lopdf |
 | Coordinate mapping | ✅ | `MediaBox`-based |
 | MuPDF as rendering backend | ❌ Not started | The specification lists MuPDF as the rendering library. Currently lopdf is used for document parsing and the renderer is a software stub. |
@@ -218,7 +230,7 @@ current implementation status.
 | Insert text | ✅ | `InsertTextCommand` |
 | Modify existing text | ❌ Not started | Only new content streams can be appended; in-place text-object editing is not implemented. |
 | Font substitution | ❌ Not started | |
-| Insert image | ❌ Not started | |
+| Insert image | ✅ | `InsertImageCommand` — embeds a raw RGB bitmap as an uncompressed `DeviceRGB` PDF Image XObject with undo support |
 | Replace / resize image | ❌ Not started | |
 | Delete / rotate / reorder pages | ✅ | |
 | Merge documents | ✅ | |
@@ -238,7 +250,7 @@ current implementation status.
 |-------------|:------:|-------|
 | Detect form fields | ✅ | All AcroForm field types |
 | Edit field values | ✅ | `SetFieldValueCommand` with undo |
-| Create new form fields | ❌ Not started | Programmatic AcroForm field creation is not implemented. |
+| Create new form fields | ✅ | `CreateFieldCommand` — creates TextField, Checkbox, Radio, Dropdown, or SignatureField; creates AcroForm if absent; undo supported |
 | Export form data (JSON) | ✅ | `export_form_data` |
 
 ### OCR
@@ -254,16 +266,16 @@ current implementation status.
 |-------------|:------:|-------|
 | Password protection | ⚠️ Placeholder | `SetPasswordCommand` logs a warning; lopdf 0.39 has no encryption API. Requires a different PDF library or MuPDF to implement properly. |
 | Permissions | ❌ Not started | |
-| Redaction | ⚠️ Partial | `RedactRegionCommand` paints an opaque black rectangle over the region. Content beneath is not permanently removed from the document object stream — true redaction (content removal) requires additional work. |
+| Redaction | ✅ | `RedactRegionCommand` now performs **true redaction**: decompresses all content streams, parses `BT…ET` text blocks, removes blocks whose text position falls within the target rectangle, then re-encodes the result into a single filtered stream. A filled black rectangle is added on top as a visual marker. Falls back to visual-only if content stream parsing fails. |
 
 ### Performance targets
 
 | Requirement | Status | Notes |
 |-------------|:------:|-------|
 | Memory-safe LRU cache | ✅ | |
-| Background rendering (off UI thread) | ❌ Not started | All rendering currently runs synchronously on the Slint UI thread. |
+| Background rendering (off UI thread) | ✅ | Dedicated `render-worker` thread; `SoftwareRenderer::render_from_dims` runs off the UI thread; results are handed back via `slint::invoke_from_event_loop`. The cache is shared via `Arc<Mutex<PageCache>>`. |
 | Lazy page loading | ❌ Not started | `Document::open` loads the full lopdf object graph at open time. |
-| `<100 ms` page navigation latency | ❌ Not measured | Blocked by synchronous rendering on UI thread. |
+| `<100 ms` page navigation latency | ❌ Not measured | Achievable with real rendering (MuPDF) once integrated. |
 | Incremental saves | ❌ Not started | See document engine row above. |
 
 ### Plugin system
@@ -286,6 +298,6 @@ current implementation status.
 | Trait-based abstractions | ✅ | `DocumentCommand`, `RenderEngine`, `OcrProvider`, `Plugin` |
 | No global state | ✅ | |
 | Workspace layout matches spec | ✅ | `pdf-core / pdf-render / pdf-editor / pdf-annotations / pdf-forms / app-desktop` |
-| Async Rust | ❌ Not started | Spec lists async as part of the stack; currently all synchronous |
+| Async Rust | ❌ Not started | Spec lists async as part of the stack; currently all synchronous (background rendering uses OS threads, not async/await) |
 
 **Legend:** ✅ Implemented · ⚠️ Partial / placeholder · ❌ Not started · 🔲 Intentionally deferred
