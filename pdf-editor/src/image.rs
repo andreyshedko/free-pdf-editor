@@ -568,7 +568,12 @@ impl DocumentCommand for ReplaceImageCommand {
                 };
                 match bytes.and_then(|b| lopdf::content::Content::decode(&b).ok()) {
                     Some(parsed) => all_ops.extend(parsed.operations),
-                    None => continue,
+                    None => {
+                        return Err(PdfCoreError::LopdfError(
+                            "Failed to decode page content stream while updating image transform"
+                                .to_string(),
+                        ));
+                    }
                 }
             }
 
