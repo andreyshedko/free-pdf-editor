@@ -290,13 +290,16 @@ impl DocumentCommand for ModifyTextCommand {
                     .map(|s| s.content.clone())
             };
 
-            match bytes.and_then(|b| Content::decode(&b).ok()) {
-                Some(parsed) => {
+            match bytes {
+                Some(b) => {
+                    let parsed = Content::decode(&b)
+                        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
                     all_ops.extend(parsed.operations.into_iter().map(|mut op| {
                         replace_text_in_op(&mut op, &old_bytes, &new_text);
                         op
                     }));
                 }
+                // If there is no stream or we cannot retrieve its bytes, skip it as before.
                 None => continue,
             }
         }
