@@ -453,35 +453,46 @@ impl AppController {
         }
     }
 
-    /// Opens a license file selected via environment variable and activates it.
+    /// Activates a commercial license file.
     ///
-    /// In a production desktop build this would show a native file-picker.
-    /// For now the path is read from the `ACTIVATE_LICENSE` environment variable
-    /// so that activation can be exercised non-interactively (e.g., in tests).
+    /// In debug builds the path is read from the `ACTIVATE_LICENSE` environment
+    /// variable so that activation can be exercised non-interactively (e.g. in
+    /// automated tests).  In release builds this path is not available because
+    /// a native file-picker has not yet been integrated; the button is therefore
+    /// disabled in release to avoid shipping a non-functional code path.
     fn activate_license_dialog(&mut self) {
-        let path = match std::env::var("ACTIVATE_LICENSE") {
-            Ok(p) => std::path::PathBuf::from(p),
-            Err(_) => {
-                self.emit(DocumentEvent::StatusChanged {
-                    message: "Set ACTIVATE_LICENSE env var to the path of your .pdfeditor-license file".into(),
-                });
-                return;
-            }
-        };
+        #[cfg(debug_assertions)]
+        {
+            let path = match std::env::var("ACTIVATE_LICENSE") {
+                Ok(p) => std::path::PathBuf::from(p),
+                Err(_) => {
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: "Set ACTIVATE_LICENSE env var to the path of your .pdfeditor-license file".into(),
+                    });
+                    return;
+                }
+            };
 
-        match self.license.activate(&path) {
-            Ok(()) => {
-                self.update_license_display();
-                self.emit(DocumentEvent::StatusChanged {
-                    message: "Commercial license activated successfully.".into(),
-                });
+            match self.license.activate(&path) {
+                Ok(()) => {
+                    self.update_license_display();
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: "Commercial license activated successfully.".into(),
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!("license activation failed: {e}");
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: format!("License activation failed: {e}"),
+                    });
+                }
             }
-            Err(e) => {
-                tracing::warn!("license activation failed: {e}");
-                self.emit(DocumentEvent::StatusChanged {
-                    message: format!("License activation failed: {e}"),
-                });
-            }
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "License activation is not available in this build.".into(),
+            });
         }
     }
 

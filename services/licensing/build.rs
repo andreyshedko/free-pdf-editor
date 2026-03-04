@@ -34,9 +34,10 @@ fn main() {
                 );
             }
 
-            // Deterministic test key (public half only; private key is not stored).
+            // Deterministic test key (public half only; the corresponding seed
+            // is available in test code only — see manager::tests).
             // Replace with a real key for production builds via APP_PUBLIC_KEY.
-            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a".to_string()
+            "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12".to_string()
         }
     };
 
