@@ -79,6 +79,18 @@ release_version = release.get("version", "")
 if not re.match(r"^\d+\.\d+\.\d+$", release_version):
     errors.append(f"release.json: version must be MAJOR.MINOR.PATCH, got: '{release_version}'")
 
+# ── Cross-file version consistency ───────────────────────────────────────────
+meta_version = meta.get("version", "")
+if meta_version and release_version and meta_version != release_version:
+    errors.append(
+        f"version mismatch: store/metadata.json has '{meta_version}' "
+        f"but release/release.json has '{release_version}'"
+    )
+if meta_version and not re.match(r"^\d+\.\d+\.\d+$", meta_version):
+    errors.append(
+        f"metadata: version must be MAJOR.MINOR.PATCH, got: '{meta_version}'"
+    )
+
 # ── Check channel ─────────────────────────────────────────────────────────────
 channel = release.get("channel", "")
 if channel not in VALID_CHANNELS:
