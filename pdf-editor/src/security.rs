@@ -170,7 +170,11 @@ fn try_true_redact(
                 filtered_ops
                     .extend(filter_text_in_rect(parsed.operations, x, y, width, height));
             }
-            None => return false,
+            None => {
+                // If a content stream cannot be decoded, skip it rather than
+                // aborting and triggering a fallback path after decompression.
+                continue;
+            }
         }
     }
 
