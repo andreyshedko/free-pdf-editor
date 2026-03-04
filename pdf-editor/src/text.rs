@@ -641,6 +641,12 @@ impl DocumentCommand for FontSubstitutionCommand {
 
 /// Adds a minimal standard Type1 font entry to the page's `/Resources/Font`
 /// dictionary if it is not already present.
+///
+/// Walks the `/Parent` chain to find the effective `/Resources` dict (including
+/// inherited resources) and dereferences indirect `/Resources` and `/Font`
+/// objects before merging in the new font entry.  The merged dict is written
+/// inline on the page node so that the page-level resources shadow any
+/// inherited ancestor resources without losing them.
 fn ensure_standard_font(
     doc: &mut Document,
     page_id: lopdf::ObjectId,
@@ -648,37 +654,67 @@ fn ensure_standard_font(
 ) -> Result<(), PdfCoreError> {
     let font_name_bytes = font_name.as_bytes().to_vec();
 
-    // Collect the current Resources dict (inline or indirect).
+    // Walk up the /Parent chain to find the nearest /Resources dict.
     let mut resources_dict: lopdf::Dictionary = {
         let inner = doc.inner();
-        inner
-            .get_object(page_id)
-            .ok()
-            .and_then(|o| o.as_dict().ok())
-            .and_then(|d| d.get(b"Resources").ok())
-            .and_then(|o| {
-                if let Ok(res_id) = o.as_reference() {
+        let mut current_id = page_id;
+        let mut found: Option<lopdf::Dictionary> = None;
+
+        loop {
+            let dict_opt = inner
+                .get_object(current_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok());
+            let dict = match dict_opt {
+                Some(d) => d,
+                None => break,
+            };
+
+            // Try to resolve /Resources at this node (direct or indirect).
+            if let Ok(res_obj) = dict.get(b"Resources") {
+                let resolved = if let Ok(res_id) = res_obj.as_reference() {
                     inner
                         .get_object(res_id)
                         .ok()
                         .and_then(|ro| ro.as_dict().ok())
                         .cloned()
                 } else {
-                    o.as_dict().ok().cloned()
+                    res_obj.as_dict().ok().cloned()
+                };
+                if let Some(d) = resolved {
+                    found = Some(d);
+                    break;
                 }
-            })
-            .unwrap_or_else(lopdf::Dictionary::new)
+            }
+
+            // No /Resources here — follow /Parent if present.
+            match dict.get(b"Parent").ok().and_then(|p| p.as_reference().ok()) {
+                Some(parent_id) => current_id = parent_id,
+                None => break,
+            }
+        }
+
+        found.unwrap_or_else(lopdf::Dictionary::new)
     };
 
-    // Get or create /Font sub-dictionary.
-    let mut font_dict: lopdf::Dictionary = resources_dict
-        .get(b"Font")
-        .ok()
-        .and_then(|o| o.as_dict().ok())
-        .cloned()
-        .unwrap_or_else(lopdf::Dictionary::new);
+    // Get or create the /Font sub-dictionary, resolving indirect references.
+    let mut font_dict: lopdf::Dictionary = {
+        let font_obj = resources_dict.get(b"Font").ok().cloned();
+        match font_obj {
+            Some(Object::Reference(font_id)) => {
+                doc.inner()
+                    .get_object(font_id)
+                    .ok()
+                    .and_then(|o| o.as_dict().ok())
+                    .cloned()
+                    .unwrap_or_else(lopdf::Dictionary::new)
+            }
+            Some(Object::Dictionary(d)) => d,
+            _ => lopdf::Dictionary::new(),
+        }
+    };
 
-    // Only add if not already present.
+    // Only add the font entry if not already present.
     if font_dict.get(&font_name_bytes).is_err() {
         let font_entry = Object::Dictionary(lopdf::dictionary! {
             "Type"     => Object::Name(b"Font".to_vec()),
@@ -690,7 +726,8 @@ fn ensure_standard_font(
 
     resources_dict.set("Font", Object::Dictionary(font_dict));
 
-    // Write back.
+    // Write the effective Resources dict inline on the page dictionary so it
+    // shadows (but does not destroy) ancestor-inherited resources.
     doc.inner_mut()
         .get_object_mut(page_id)
         .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?

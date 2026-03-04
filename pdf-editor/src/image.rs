@@ -532,6 +532,13 @@ impl DocumentCommand for ReplaceImageCommand {
             stream_obj.dict.remove(b"Filter");
             stream_obj.dict.remove(b"DecodeParms");
 
+            // Explicitly set image parameters consistent with raw DeviceRGB data.
+            stream_obj
+                .dict
+                .set("ColorSpace", Object::Name(b"DeviceRGB".to_vec()));
+            stream_obj
+                .dict
+                .set("BitsPerComponent", Object::Integer(8));
             stream_obj
                 .dict
                 .set("Width", Object::Integer(self.new_width as i64));
