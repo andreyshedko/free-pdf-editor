@@ -81,6 +81,11 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: version
+    env:
+      APP_VERSION: ${{ needs.version.outputs.APP_VERSION }}
+      APP_CHANNEL: ${{ needs.version.outputs.APP_CHANNEL }}
+      APP_BUILD_NUMBER: ${{ needs.version.outputs.APP_BUILD_NUMBER }}
+      STORE_BUILD: ${{ needs.version.outputs.STORE_BUILD }}
     permissions:
       contents: read
     steps:
