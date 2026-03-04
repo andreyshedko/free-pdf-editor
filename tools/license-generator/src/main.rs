@@ -189,9 +189,23 @@ fn cmd_generate(args: &[String]) {
     });
 
     // Write to file.
+    // Sanitize holder for use in the filename: allow only [A-Za-z0-9_-], replace others with '_'.
+    let mut safe_holder: String = holder
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if safe_holder.is_empty() {
+        safe_holder = "license".to_string();
+    }
     let filename = PathBuf::from(format!(
         "{}-{}.pdfeditor-license",
-        holder.replace(' ', "_").to_lowercase(),
+        safe_holder.to_lowercase(),
         license_type
     ));
     std::fs::write(&filename, &json).unwrap_or_else(|e| {
