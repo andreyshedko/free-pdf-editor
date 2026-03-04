@@ -9,9 +9,9 @@ use pdf_core::{
     event::{DocumentEvent, EventBus},
 };
 use pdf_editor::{DeletePageCommand, RotatePageCommand};
-use pdf_render::{CacheKey, PageCache, RenderedPage, SoftwareRenderer};
 #[cfg(feature = "mupdf")]
 use pdf_render::MuPdfRenderer;
+use pdf_render::{CacheKey, PageCache, RenderedPage, SoftwareRenderer};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
