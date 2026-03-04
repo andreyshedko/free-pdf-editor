@@ -4,9 +4,18 @@
 # Uses a temporary keychain so credentials are never written permanently.
 #
 # Required environment variables:
-#   APPLE_CERT_BASE64    - base64-encoded Developer ID certificate (p12)
+#   APPLE_CERT_BASE64    - base64-encoded Developer ID / Distribution certificate (p12)
 #   APPLE_CERT_PASSWORD  - certificate password
-#   APPLE_TEAM_ID        - Apple Developer Team ID
+#   APPLE_TEAM_ID        - Apple Developer Team ID (used only as a fallback identity)
+#
+# Optional environment variables:
+#   APPLE_SIGN_IDENTITY  - Full certificate common name to pass to codesign --sign.
+#                          For direct/notarized distribution use a "Developer ID
+#                          Application: <Name> (<TEAMID>)" cert.
+#                          For Mac App Store builds use an "Apple Distribution: ..."
+#                          or "3rd Party Mac Developer Application: ..." cert.
+#                          Defaults to "Developer ID Application: ${APPLE_TEAM_ID}"
+#                          if not set (backwards-compatible).
 set -euo pipefail
 
 APP_NAME="FreePDFEditor"
@@ -15,6 +24,10 @@ APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 KEYCHAIN_NAME="ci-build-$(date +%s)"
 KEYCHAIN_PATH="$TMPDIR/$KEYCHAIN_NAME.keychain-db"
 CERT_PATH="$TMPDIR/apple_cert.p12"
+
+# Signing identity: use the explicit env var if provided, otherwise fall back
+# to the legacy "Developer ID Application: <TEAMID>" form.
+SIGN_IDENTITY="${APPLE_SIGN_IDENTITY:-Developer ID Application: ${APPLE_TEAM_ID}}"
 
 cleanup() {
   echo "==> Cleaning up temporary keychain and certificate"
@@ -42,13 +55,13 @@ security set-key-partition-list \
 PREV_KEYCHAINS=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
 security list-keychains -d user -s "$KEYCHAIN_PATH" $PREV_KEYCHAINS
 
-echo "==> Code-signing $APP_BUNDLE"
+echo "==> Code-signing $APP_BUNDLE with identity: $SIGN_IDENTITY"
 codesign \
   --deep \
   --force \
   --options runtime \
   --entitlements "platform/macos/entitlements.plist" \
-  --sign "Developer ID Application: ${APPLE_TEAM_ID}" \
+  --sign "$SIGN_IDENTITY" \
   --timestamp \
   "$APP_BUNDLE"
 

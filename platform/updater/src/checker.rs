@@ -5,7 +5,11 @@ use semver::Version;
 use tracing::debug;
 
 /// Update server URL configured at compile time via `UPDATE_SERVER_URL` build env.
-const UPDATE_SERVER_URL: &str = env!("UPDATE_SERVER_URL");
+/// Falls back to an empty string when the env var is not set (e.g. local dev builds).
+const UPDATE_SERVER_URL: &str = match option_env!("UPDATE_SERVER_URL") {
+    Some(v) => v,
+    None => "",
+};
 
 /// Information about an available update.
 #[derive(Debug, Clone)]
@@ -24,7 +28,7 @@ pub struct UpdateInfo {
 ///
 /// On store builds (STORE_BUILD=1) this always returns `Ok(None)`.
 pub fn check_for_update(channel: &str) -> Result<Option<UpdateInfo>, Box<dyn std::error::Error>> {
-    if env!("STORE_BUILD") == "1" {
+    if option_env!("STORE_BUILD").unwrap_or("0") == "1" {
         debug!("Store build detected; self-update disabled");
         return Ok(None);
     }
@@ -34,7 +38,7 @@ pub fn check_for_update(channel: &str) -> Result<Option<UpdateInfo>, Box<dyn std
         return Ok(None);
     }
 
-    let current_str = env!("APP_VERSION");
+    let current_str = option_env!("APP_VERSION").unwrap_or("0.0.0");
     let current = Version::parse(current_str)?;
 
     let manifest: UpdateManifest = ureq::get(UPDATE_SERVER_URL)

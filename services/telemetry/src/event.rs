@@ -29,9 +29,9 @@ impl Event {
             .as_secs();
         Self {
             event: event.into(),
-            version: env!("APP_VERSION").to_string(),
+            version: option_env!("APP_VERSION").unwrap_or("dev").to_string(),
             platform: current_platform(),
-            channel: env!("APP_CHANNEL").to_string(),
+            channel: option_env!("APP_CHANNEL").unwrap_or("dev").to_string(),
             timestamp: format!("{ts}"),
             value: None,
         }

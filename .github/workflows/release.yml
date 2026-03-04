@@ -216,6 +216,7 @@ jobs:
           APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
 
       - name: Notarize and build PKG
         run: bash scripts/notarize_macos.sh
@@ -224,6 +225,9 @@ jobs:
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_INSTALLER_CERT_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_BASE64 }}
+          APPLE_INSTALLER_CERT_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERT_PASSWORD }}
+          APPLE_INSTALLER_SIGN_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGN_IDENTITY }}
 
       - name: Generate SHA256 checksum
         run: |
@@ -261,9 +265,14 @@ jobs:
       - name: Upload to TestFlight via altool
         run: |
           PKG="dist/macos/${APP_NAME}_${APP_VERSION}.pkg"
-          # Write the API key to a temp file so it is never passed on the command line.
-          KEY_FILE="$TMPDIR/apple_api_key.p8"
+          # altool locates .p8 keys in ~/.appstoreconnect/private_keys/
+          # by the naming convention AuthKey_<KEY_ID>.p8.  Write the secret
+          # there so the --apiKey / --apiIssuer flags can resolve the key file.
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          KEY_FILE="$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8"
           printf '%s' "$APPLE_API_PRIVATE_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
           trap 'rm -f "$KEY_FILE"' EXIT
           xcrun altool \
             --upload-package "$PKG" \

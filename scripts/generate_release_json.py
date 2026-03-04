@@ -50,14 +50,13 @@ if not m:
 
 major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
 
-# ── Build number: MAJOR*1000 + MINOR*100 + PATCH*10 + CI_RUN_NUMBER ──────────
-# CI_RUN_NUMBER is taken modulo 10 to fit in the units digit.
-# NOTE: this means run numbers that share the same last digit (e.g. 1 and 11)
-# will produce the same build_number for an identical tag.  Retrying a failed
-# release run is therefore safe only if the version or channel differs.
-# For CI tracking purposes the raw run number is also logged to the workflow.
-run_digit = ci_run_number % 10
-build_number = major * 1000 + minor * 100 + patch * 10 + run_digit
+# ── Build number: MAJOR*1_000_000 + MINOR*10_000 + PATCH*100 + (CI_RUN % 100) ─
+# Using 100 unique slots per patch level means a tag would need to be re-run
+# more than 100 times before a build-number collision occurs — far beyond normal
+# CI retry scenarios.  The maximum value for v99.99.99 run 99 is ~100_099_999,
+# well within Apple's 2^31 and Microsoft Store's 65535-per-component limits.
+run_component = ci_run_number % 100
+build_number = major * 1_000_000 + minor * 10_000 + patch * 100 + run_component
 
 # ── Load existing release.json to preserve unknown fields ────────────────────
 release_path = "release/release.json"

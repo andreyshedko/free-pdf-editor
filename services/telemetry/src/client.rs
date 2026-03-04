@@ -4,7 +4,11 @@ use super::event::Event;
 use tracing::{debug, warn};
 
 /// Endpoint configured at compile time via `TELEMETRY_ENDPOINT` build env.
-const TELEMETRY_ENDPOINT: &str = env!("TELEMETRY_ENDPOINT");
+/// Falls back to an empty string when the env var is not set (e.g. local dev builds).
+const TELEMETRY_ENDPOINT: &str = match option_env!("TELEMETRY_ENDPOINT") {
+    Some(v) => v,
+    None => "",
+};
 
 /// Thread-safe telemetry client.
 ///
@@ -17,10 +21,19 @@ pub struct TelemetryClient {
 
 impl TelemetryClient {
     /// Create a new client.  Pass `enabled = false` to silently drop all events.
+    ///
+    /// `enabled` is additionally gated on `TELEMETRY_ENDPOINT` being configured:
+    /// if the endpoint is empty the client behaves as if `enabled = false` so
+    /// that `record()` never sends on a disconnected channel.
     pub fn new(enabled: bool) -> Self {
         let (tx, rx) = std::sync::mpsc::sync_channel::<Event>(256);
 
-        if enabled && !TELEMETRY_ENDPOINT.is_empty() {
+        // Gate on both the caller's flag and the endpoint being set so that
+        // `self.enabled` accurately reflects whether the channel has a live
+        // background consumer.
+        let effective_enabled = enabled && !TELEMETRY_ENDPOINT.is_empty();
+
+        if effective_enabled {
             std::thread::Builder::new()
                 .name("telemetry".into())
                 .spawn(move || {
@@ -36,7 +49,7 @@ impl TelemetryClient {
         }
 
         Self {
-            enabled,
+            enabled: effective_enabled,
             sender: tx,
         }
     }
