@@ -443,17 +443,11 @@ App Store Connect.
    # release/release.json → bump version and build_number
    ```
 
-5. **Build a universal binary**
-
-   ```bash
-   bash scripts/build_macos.sh
-   # Output: dist/macos/FreePDFEditor.app
-   ```
-
-   To build without signing (e.g. for testing):
+5. **Build a universal binary** (skip signing — the next step handles it)
 
    ```bash
    SKIP_SIGNING=1 bash scripts/build_macos.sh
+   # Output: dist/macos/FreePDFEditor.app
    ```
 
 6. **Sign and package**
@@ -478,6 +472,8 @@ App Store Connect.
      --component "dist/macos/FreePDFEditor.app" /Applications \
      --sign "$APPLE_INSTALLER_SIGN_IDENTITY" \
      "dist/macos/FreePDFEditor_<VERSION>.pkg"
+   ```
+
 7. **Upload to App Store Connect** — use Apple's *Transporter* app
    ([download from Mac App Store](https://apps.apple.com/app/transporter/id1450874784))
    or its bundled CLI:
