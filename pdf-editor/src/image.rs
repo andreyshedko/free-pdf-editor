@@ -344,3 +344,418 @@ mod tests {
         assert_ne!(cmd1.resource_name, cmd2.resource_name);
     }
 }
+
+// ---------------------------------------------------------------------------
+// ReplaceImageCommand
+// ---------------------------------------------------------------------------
+
+/// Replaces an existing PDF Image XObject (identified by its resource name on
+/// `page_index`) with new raw RGB pixel data.
+///
+/// The caller provides the new pixel data as uncompressed 24-bit RGB bytes,
+/// along with the new intrinsic pixel dimensions.  If `new_display_width` /
+/// `new_display_height` are `Some`, every `cm` operator that **immediately
+/// precedes** the corresponding `Do` call inside the page's content streams is
+/// also updated so the on-page display size changes accordingly.
+///
+/// Undo is supported via a full-document snapshot.
+#[derive(Debug)]
+pub struct ReplaceImageCommand {
+    page_index: u32,
+    /// XObject resource name as it appears in the page's `/Resources/XObject`
+    /// dictionary (e.g. `"Im1"` or `"ImAuto3"`).
+    resource_name: String,
+    new_data: Vec<u8>,
+    new_width: u32,
+    new_height: u32,
+    /// If `Some`, update the on-page display width (PDF user units).
+    new_display_width: Option<f32>,
+    /// If `Some`, update the on-page display height (PDF user units).
+    new_display_height: Option<f32>,
+    snapshot: Option<Vec<u8>>,
+}
+
+impl ReplaceImageCommand {
+    /// Create a replace-image command.
+    ///
+    /// * `resource_name` — the key in the page's `/Resources/XObject`
+    ///   dictionary that identifies the image to replace.
+    /// * `new_data` — uncompressed 24-bit RGB pixels (3 bytes per pixel,
+    ///   top-to-bottom, left-to-right).
+    /// * `new_width`, `new_height` — intrinsic pixel dimensions of `new_data`.
+    /// * `new_display_width`, `new_display_height` — optional new on-page
+    ///   display size in PDF user units; `None` leaves the current size
+    ///   unchanged.
+    pub fn new(
+        page_index: u32,
+        resource_name: impl Into<String>,
+        new_data: Vec<u8>,
+        new_width: u32,
+        new_height: u32,
+        new_display_width: Option<f32>,
+        new_display_height: Option<f32>,
+    ) -> Self {
+        Self {
+            page_index,
+            resource_name: resource_name.into(),
+            new_data,
+            new_width,
+            new_height,
+            new_display_width,
+            new_display_height,
+            snapshot: None,
+        }
+    }
+}
+
+impl DocumentCommand for ReplaceImageCommand {
+    fn description(&self) -> &str { "Replace image" }
+
+    fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
+        let expected = self.new_width as usize * self.new_height as usize * 3;
+        if self.new_data.len() != expected {
+            return Err(PdfCoreError::InvalidArgument(format!(
+                "expected {} bytes for {}×{} RGB image, got {}",
+                expected,
+                self.new_width,
+                self.new_height,
+                self.new_data.len()
+            )));
+        }
+
+        self.snapshot = Some(snapshot_doc(doc)?);
+
+        let page_id = doc.get_page(self.page_index)?.object_id;
+        let name_bytes = self.resource_name.as_bytes().to_vec();
+
+        // ----------------------------------------------------------------
+        // 1. Find the Image XObject object ID via /Resources/XObject.
+        // ----------------------------------------------------------------
+        let img_obj_id: lopdf::ObjectId = {
+            let inner = doc.inner();
+            inner
+                .get_object(page_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok())
+                .and_then(|d| d.get(b"Resources").ok())
+                .and_then(|o| {
+                    if let Ok(res_id) = o.as_reference() {
+                        inner
+                            .get_object(res_id)
+                            .ok()
+                            .and_then(|ro| ro.as_dict().ok())
+                            .and_then(|d| d.get(b"XObject").ok())
+                            .cloned()
+                    } else {
+                        o.as_dict()
+                            .ok()
+                            .and_then(|d| d.get(b"XObject").ok())
+                            .cloned()
+                    }
+                })
+                .and_then(|xo| {
+                    if let Ok(xo_id) = xo.as_reference() {
+                        inner
+                            .get_object(xo_id)
+                            .ok()
+                            .and_then(|ro| ro.as_dict().ok())
+                            .and_then(|d| d.get(&name_bytes).ok())
+                            .and_then(|o| o.as_reference().ok())
+                    } else {
+                        xo.as_dict()
+                            .ok()
+                            .and_then(|d| d.get(&name_bytes).ok())
+                            .and_then(|o| o.as_reference().ok())
+                    }
+                })
+                .ok_or_else(|| {
+                    PdfCoreError::InvalidArgument(format!(
+                        "image resource '{}' not found on page {}",
+                        self.resource_name, self.page_index
+                    ))
+                })?
+        };
+
+        // ----------------------------------------------------------------
+        // 2. Update the Image XObject stream (data + dimensions).
+        // ----------------------------------------------------------------
+        {
+            let stream_obj = doc
+                .inner_mut()
+                .get_object_mut(img_obj_id)
+                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                .as_stream_mut()
+                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+
+            // Remove any existing filter — we are providing raw pixel bytes.
+            stream_obj.dict.remove(b"Filter");
+            stream_obj.dict.remove(b"DecodeParms");
+
+            stream_obj
+                .dict
+                .set("Width", Object::Integer(self.new_width as i64));
+            stream_obj
+                .dict
+                .set("Height", Object::Integer(self.new_height as i64));
+            stream_obj
+                .dict
+                .set("Length", Object::Integer(self.new_data.len() as i64));
+
+            stream_obj.content = self.new_data.clone();
+        }
+
+        // ----------------------------------------------------------------
+        // 3. Optionally update the `cm` transform in the content streams.
+        // ----------------------------------------------------------------
+        if self.new_display_width.is_some() || self.new_display_height.is_some() {
+            doc.inner_mut().decompress();
+
+            let content_ids: Vec<lopdf::ObjectId> = {
+                let inner = doc.inner();
+                collect_content_ids_img(inner, page_id)
+            };
+
+            let mut all_ops: Vec<lopdf::content::Operation> = Vec::new();
+            for stream_id in &content_ids {
+                let bytes = {
+                    let inner = doc.inner();
+                    inner
+                        .get_object(*stream_id)
+                        .ok()
+                        .and_then(|o| o.as_stream().ok())
+                        .map(|s| s.content.clone())
+                };
+                match bytes.and_then(|b| lopdf::content::Content::decode(&b).ok()) {
+                    Some(parsed) => all_ops.extend(parsed.operations),
+                    None => continue,
+                }
+            }
+
+            update_cm_for_resource(
+                &mut all_ops,
+                &name_bytes,
+                self.new_display_width,
+                self.new_display_height,
+            );
+
+            let encoded = lopdf::content::Content { operations: all_ops }
+                .encode()
+                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+
+            let new_content_id = doc
+                .inner_mut()
+                .add_object(lopdf::Stream::new(lopdf::dictionary! {}, encoded));
+
+            doc.inner_mut()
+                .get_object_mut(page_id)
+                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                .as_dict_mut()
+                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                .set("Contents", Object::Reference(new_content_id));
+        }
+
+        tracing::debug!(
+            page_index = self.page_index,
+            resource = %self.resource_name,
+            new_width = self.new_width,
+            new_height = self.new_height,
+            "image replaced"
+        );
+        Ok(())
+    }
+
+    fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
+        let snap = self.snapshot.as_ref().ok_or(PdfCoreError::NotUndoable)?;
+        let restored = lopdf::Document::load_mem(snap)
+            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        *doc.inner_mut() = restored;
+        Ok(())
+    }
+}
+
+fn collect_content_ids_img(
+    inner: &lopdf::Document,
+    page_id: lopdf::ObjectId,
+) -> Vec<lopdf::ObjectId> {
+    let contents = inner
+        .get_object(page_id)
+        .ok()
+        .and_then(|o| o.as_dict().ok())
+        .and_then(|d| d.get(b"Contents").ok());
+    match contents {
+        Some(Object::Reference(id)) => vec![*id],
+        Some(Object::Array(arr)) => {
+            arr.iter().filter_map(|o| o.as_reference().ok()).collect()
+        }
+        _ => vec![],
+    }
+}
+
+/// Update the `cm` operator that **immediately precedes** a `Do` call for
+/// `resource_name_bytes`.  Only the scale components (a = display_width,
+/// d = display_height) are updated; translation (e, f) is preserved.
+fn update_cm_for_resource(
+    ops: &mut Vec<lopdf::content::Operation>,
+    resource_name_bytes: &[u8],
+    new_display_width: Option<f32>,
+    new_display_height: Option<f32>,
+) {
+    for i in 0..ops.len() {
+        if ops[i].operator == "Do" {
+            if let Some(Object::Name(ref n)) = ops[i].operands.first() {
+                if n.as_slice() == resource_name_bytes {
+                    // Look back for the preceding `cm` (only if one exists).
+                    if i > 0
+                        && ops[i - 1].operator == "cm"
+                        && ops[i - 1].operands.len() == 6
+                    {
+                        if let Some(w) = new_display_width {
+                            ops[i - 1].operands[0] = Object::Real(w);
+                        }
+                        if let Some(h) = new_display_height {
+                            ops[i - 1].operands[3] = Object::Real(h);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod replace_tests {
+    use super::*;
+    use pdf_core::Document;
+    use tempfile::NamedTempFile;
+
+    fn pdf_with_image(width: u32, height: u32) -> (NamedTempFile, String) {
+        // Insert a real image and return the file + resource name.
+        let doc_file = {
+            use lopdf::{dictionary, Document as LopdfDoc, Object, Stream};
+            let mut doc = LopdfDoc::with_version("1.7");
+            let pages_id = doc.new_object_id();
+            let page_id = doc.new_object_id();
+            let content = Stream::new(dictionary! {}, b"BT ET".to_vec());
+            let content_id = doc.add_object(content);
+            let page = Object::Dictionary(dictionary! {
+                "Type"     => Object::Name(b"Page".to_vec()),
+                "Parent"   => Object::Reference(pages_id),
+                "MediaBox" => Object::Array(vec![
+                    Object::Integer(0), Object::Integer(0),
+                    Object::Integer(595), Object::Integer(842),
+                ]),
+                "Contents" => Object::Reference(content_id),
+            });
+            doc.objects.insert(page_id, page);
+            let pages = Object::Dictionary(dictionary! {
+                "Type"  => Object::Name(b"Pages".to_vec()),
+                "Kids"  => Object::Array(vec![Object::Reference(page_id)]),
+                "Count" => Object::Integer(1),
+            });
+            doc.objects.insert(pages_id, pages);
+            let catalog_id = doc.add_object(dictionary! {
+                "Type"  => Object::Name(b"Catalog".to_vec()),
+                "Pages" => Object::Reference(pages_id),
+            });
+            doc.trailer.set("Root", Object::Reference(catalog_id));
+            let mut f = NamedTempFile::new().expect("temp");
+            doc.save_to(f.as_file_mut()).expect("save");
+            f
+        };
+
+        // Open, insert image, save.
+        let mut doc = Document::open(doc_file.path()).expect("open");
+        let data = vec![128u8; (width * height * 3) as usize];
+        let mut insert_cmd =
+            InsertImageCommand::new(0, data, width, height, 10.0, 10.0, 100.0, 100.0);
+        insert_cmd.execute(&mut doc).expect("insert");
+        doc.save_to(doc_file.path()).expect("save");
+
+        let resource_name = insert_cmd.resource_name.clone();
+        (doc_file, resource_name)
+    }
+
+    #[test]
+    fn replace_image_updates_dimensions() {
+        let (f, res_name) = pdf_with_image(4, 4);
+        let mut doc = Document::open(f.path()).expect("open");
+
+        let new_data = vec![200u8; 2 * 2 * 3];
+        let mut cmd = ReplaceImageCommand::new(0, &res_name, new_data, 2, 2, None, None);
+        cmd.execute(&mut doc).expect("execute");
+
+        // Check the image stream's Width/Height were updated.
+        let page_id = doc.get_page(0).unwrap().object_id;
+        let img_id = doc
+            .inner()
+            .get_object(page_id).ok()
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(b"Resources").ok())
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(b"XObject").ok())
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(res_name.as_bytes()).ok())
+            .and_then(|o| o.as_reference().ok())
+            .expect("image obj id");
+
+        let (w, h) = doc
+            .inner()
+            .get_object(img_id).ok()
+            .and_then(|o| o.as_stream().ok())
+            .map(|s| {
+                let w = s.dict.get(b"Width").ok()
+                    .and_then(|o| o.as_i64().ok())
+                    .unwrap_or(0);
+                let h = s.dict.get(b"Height").ok()
+                    .and_then(|o| o.as_i64().ok())
+                    .unwrap_or(0);
+                (w, h)
+            })
+            .expect("stream");
+
+        assert_eq!(w, 2, "Width should be updated to 2");
+        assert_eq!(h, 2, "Height should be updated to 2");
+    }
+
+    #[test]
+    fn replace_image_undo_restores_original() {
+        let (f, res_name) = pdf_with_image(4, 4);
+        let mut doc = Document::open(f.path()).expect("open");
+
+        let new_data = vec![200u8; 2 * 2 * 3];
+        let mut cmd = ReplaceImageCommand::new(0, &res_name, new_data, 2, 2, None, None);
+        cmd.execute(&mut doc).expect("execute");
+        cmd.undo(&mut doc).expect("undo");
+
+        // After undo, page count should be unchanged.
+        assert_eq!(doc.page_count(), 1);
+    }
+
+    #[test]
+    fn replace_image_wrong_data_size_fails() {
+        let (f, res_name) = pdf_with_image(4, 4);
+        let mut doc = Document::open(f.path()).expect("open");
+        // Provide wrong number of bytes for a 2×2 image.
+        let mut cmd = ReplaceImageCommand::new(0, &res_name, vec![0u8; 5], 2, 2, None, None);
+        assert!(cmd.execute(&mut doc).is_err());
+    }
+
+    #[test]
+    fn replace_image_unknown_resource_fails() {
+        let (f, _) = pdf_with_image(4, 4);
+        let mut doc = Document::open(f.path()).expect("open");
+        let new_data = vec![0u8; 2 * 2 * 3];
+        let mut cmd =
+            ReplaceImageCommand::new(0, "NoSuchImage", new_data, 2, 2, None, None);
+        assert!(cmd.execute(&mut doc).is_err());
+    }
+
+    #[test]
+    fn replace_image_out_of_range_page_fails() {
+        let (f, res_name) = pdf_with_image(4, 4);
+        let mut doc = Document::open(f.path()).expect("open");
+        let new_data = vec![0u8; 2 * 2 * 3];
+        let mut cmd = ReplaceImageCommand::new(99, &res_name, new_data, 2, 2, None, None);
+        assert!(cmd.execute(&mut doc).is_err());
+    }
+}
