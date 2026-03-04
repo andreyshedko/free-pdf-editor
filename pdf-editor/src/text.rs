@@ -566,21 +566,27 @@ impl DocumentCommand for FontSubstitutionCommand {
                     .map(|s| s.content.clone())
             };
 
-            match bytes.and_then(|b| Content::decode(&b).ok()) {
-                Some(parsed) => {
-                    all_ops.extend(parsed.operations.into_iter().map(|mut op| {
-                        if op.operator == "Tf" {
-                            if let Some(Object::Name(ref name)) = op.operands.first() {
-                                if name == &old_name_bytes {
-                                    op.operands[0] =
-                                        Object::Name(new_name_bytes.clone());
-                                }
+            // If we have a content stream but cannot decode it, fail the command
+            // so that the original /Contents remains unchanged.
+            if let Some(b) = bytes {
+                let parsed = Content::decode(&b)
+                    .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+
+                all_ops.extend(parsed.operations.into_iter().map(|mut op| {
+                    if op.operator == "Tf" {
+                        if let Some(Object::Name(ref name)) = op.operands.first() {
+                            if name == &old_name_bytes {
+                                op.operands[0] =
+                                    Object::Name(new_name_bytes.clone());
                             }
                         }
-                        op
-                    }));
-                }
-                None => continue,
+                    }
+                    op
+                }));
+            } else {
+                // If there is no stream content for this ID, keep existing behavior
+                // and skip it.
+                continue;
             }
         }
 
