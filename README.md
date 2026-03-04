@@ -32,7 +32,10 @@ Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** U
 | `ReorderPagesCommand` | Reorder all pages by a new index mapping | ✓ |
 | `MergeDocumentCommand` | Append all pages from another document | ✓ |
 | `InsertTextCommand` | Add text at a specified position on a page (Helvetica, configurable size) | ✓ (snapshot) |
+| `ModifyTextCommand` | Replace every literal-string occurrence of `old_text` with `new_text` across all content streams on a page | ✓ (snapshot) |
 | `InsertImageCommand` | Embed a raw RGB bitmap as an uncompressed PDF Image XObject at a given position and display size | ✓ (snapshot) |
+| `ReplaceImageCommand` | Replace an existing Image XObject (by resource name) with new raw RGB data; optionally update display dimensions via the `cm` transform | ✓ (snapshot) |
+| `FontSubstitutionCommand` | Replace all `Tf` references to one font with another across a page's content streams; auto-registers standard Type1 fonts in `/Resources/Font` | ✓ (snapshot) |
 | `SetPasswordCommand` | Placeholder for owner-password protection | ✓ (snapshot) |
 | `RedactRegionCommand` | Permanently remove text content within a region from the content streams and paint a filled black rectangle over it | ✓ (snapshot) |
 
@@ -179,11 +182,11 @@ requires a display and fontconfig on Linux):
 cargo test -p pdf-core -p pdf-render -p pdf-editor -p pdf-annotations -p pdf-forms
 ```
 
-Tests cover (40 tests total):
+Tests cover (52 tests total):
 
 - `pdf-core` — document open/save/page operations, `CommandHistory` undo/redo semantics
 - `pdf-render` — LRU cache eviction and per-document cache eviction
-- `pdf-editor` — delete/rotate/reorder/insert-text/insert-image execute-and-undo, redaction removes text in region, out-of-range errors
+- `pdf-editor` — delete/rotate/reorder/insert-text/modify-text/font-substitution/insert-image/replace-image execute-and-undo, redaction removes text in region, out-of-range errors
 - `pdf-annotations` — add/remove annotation execute-and-undo, idempotent undo guard
 - `pdf-forms` — AcroForm field detection, `SetFieldValueCommand` execute-and-undo, `CreateFieldCommand` (all field kinds, multi-field, undo)
 
@@ -227,10 +230,10 @@ current implementation status.
 | Requirement | Status | Notes |
 |-------------|:------:|-------|
 | Insert text | ✅ | `InsertTextCommand` |
-| Modify existing text | ❌ Not started | Only new content streams can be appended; in-place text-object editing is not implemented. |
-| Font substitution | ❌ Not started | |
+| Modify existing text | ✅ | `ModifyTextCommand` — decompresses content streams, replaces literal-string occurrences of the target text in `Tj`/`TJ` operators, and re-encodes the result as a merged stream. |
+| Font substitution | ✅ | `FontSubstitutionCommand` — replaces `Tf` font-name operands in all content streams on a page and auto-adds standard Type1 font entries to `/Resources/Font`. |
 | Insert image | ✅ | `InsertImageCommand` — embeds a raw RGB bitmap as an uncompressed `DeviceRGB` PDF Image XObject with undo support |
-| Replace / resize image | ❌ Not started | |
+| Replace / resize image | ✅ | `ReplaceImageCommand` — replaces the pixel data and intrinsic dimensions of an existing Image XObject identified by resource name; optionally updates the on-page `cm` transform for display resizing. |
 | Delete / rotate / reorder pages | ✅ | |
 | Merge documents | ✅ | |
 

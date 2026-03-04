@@ -4,6 +4,6 @@ pub mod security;
 pub mod image;
 
 pub use page::{DeletePageCommand, RotatePageCommand, ReorderPagesCommand, MergeDocumentCommand};
-pub use text::InsertTextCommand;
+pub use text::{InsertTextCommand, ModifyTextCommand, FontSubstitutionCommand};
 pub use security::{SetPasswordCommand, RedactRegionCommand};
-pub use image::InsertImageCommand;
+pub use image::{InsertImageCommand, ReplaceImageCommand};
