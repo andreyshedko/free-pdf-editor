@@ -57,11 +57,9 @@ fn try_upload_and_delete(path: &Path) {
     );
 
     if CRASH_ENDPOINT.is_empty() {
-        debug!("CRASH_ENDPOINT not configured; skipping upload");
-        let _ = std::fs::remove_file(path);
+        debug!("CRASH_ENDPOINT not configured; skipping upload and leaving crash report on disk");
         return;
     }
-
     match ureq::post(CRASH_ENDPOINT).send_json(&report) {
         Ok(_) => {
             debug!("Crash report {} uploaded successfully", report.crash_id);
