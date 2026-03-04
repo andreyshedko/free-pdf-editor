@@ -16,18 +16,13 @@ const TRIAL_DAYS: i64 = 14;
 
 /// Compile-time embedded ED25519 public key (32 bytes, hex-encoded).
 ///
-/// **Replace this constant with your actual server-generated public key.**
-/// The corresponding private key must exist only on the licensing server.
-///
-/// To generate a key pair (for testing):
-/// ```ignore
-/// use ed25519_dalek::SigningKey;
-/// use rand::rngs::OsRng;
-/// let sk = SigningKey::generate(&mut OsRng);
-/// println!("private: {}", hex::encode(sk.to_bytes()));
-/// println!("public:  {}", hex::encode(sk.verifying_key().to_bytes()));
-/// ```
-const PUBLIC_KEY_HEX: &str = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+/// Override at build time by setting the `APP_PUBLIC_KEY` environment variable
+/// (see `build.rs`).  The corresponding private key must exist only on the
+/// licensing server / CLI tool.
+const PUBLIC_KEY_HEX: &str = env!("APP_PUBLIC_KEY");
+
+/// Product identifier that licenses must carry to be accepted by this binary.
+const PRODUCT_NAME: &str = "PdfEditor";
 
 /// Manages license loading, verification and state exposure.
 ///
@@ -73,6 +68,42 @@ impl LicenseManager {
         self.state.feature_enabled(feature.as_token())
     }
 
+    /// Activates a license from the file at `source_path`.
+    ///
+    /// The license is validated, then copied to the platform storage path.
+    /// On success the internal state is updated immediately (no restart needed).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LicenseError`] if the file is invalid or cannot be copied.
+    pub fn activate(&mut self, source_path: &Path) -> Result<(), LicenseError> {
+        let new_state = Self::load_and_verify(source_path)?;
+
+        // Resolve the platform storage path; fail rather than silently
+        // activating a license that will disappear on the next restart.
+        let dest = license_file_path().ok_or(LicenseError::NoStoragePath)?;
+
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Avoid truncating/corrupting the file when source and dest are the same.
+        let same_file = std::fs::canonicalize(source_path)
+            .ok()
+            .zip(std::fs::canonicalize(&dest).ok())
+            .map(|(a, b)| a == b)
+            .unwrap_or(false);
+
+        if !same_file {
+            std::fs::copy(source_path, &dest)?;
+            info!("license installed to {}", dest.display());
+        }
+
+        self.state = new_state;
+        info!(?self.state.license_type, "license activated");
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
@@ -106,6 +137,11 @@ impl LicenseManager {
 
         let json_str = std::fs::read_to_string(path)?;
         let license: LicenseFile = serde_json::from_str(&json_str)?;
+
+        // Validate product name first (fast check before the cryptographic op).
+        if license.product != PRODUCT_NAME {
+            return Err(LicenseError::WrongProduct);
+        }
 
         // Verify the ED25519 signature.
         Self::verify_signature(&license)?;
@@ -420,6 +456,7 @@ mod tests {
             seats: 1,
             expiry: "2099-01-01".into(),
             features: vec!["editor".into()],
+            product: "PdfEditor".into(),
             signature: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".into(),
         };
         assert!(matches!(
@@ -444,6 +481,7 @@ mod tests {
             seats: 3,
             expiry: "2099-01-01".into(),
             features: vec!["editor".into(), "ocr".into(), "forms".into()],
+            product: "PdfEditor".into(),
             signature: String::new(),
         };
 
@@ -497,6 +535,7 @@ mod tests {
             seats: 1,
             expiry: "2099-01-01".into(),
             features: vec!["editor".into()],
+            product: "PdfEditor".into(),
             signature: "sig".into(),
         };
         let p1 = build_payload(&license).unwrap();
@@ -504,5 +543,116 @@ mod tests {
         assert_eq!(p1, p2);
         // Signature must not appear in payload.
         assert!(!p1.contains("signature"));
+    }
+
+    #[test]
+    fn wrong_product_rejected() {
+        // verify that load_and_verify returns WrongProduct.
+        // Product validation runs before signature verification, so any
+        // placeholder signature suffices here.
+        let license = LicenseFile {
+            license_id: "wrong-prod".into(),
+            license_type: LicenseType::Commercial,
+            issued_to: "Evil Corp".into(),
+            seats: 1,
+            expiry: "2099-01-01".into(),
+            features: vec!["editor".into()],
+            product: "OtherApp".into(),
+            signature: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".into(),
+        };
+
+        let json = serde_json::to_string(&license).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wrong_product.json");
+        std::fs::write(&path, json).unwrap();
+
+        assert!(matches!(
+            LicenseManager::load_and_verify(&path),
+            Err(LicenseError::WrongProduct)
+        ));
+    }
+
+    /// Test that `activate()` copies the license file to the platform storage
+    /// path and immediately updates the manager's state.
+    ///
+    /// The test signs a license with the fixed test-seed `0x42 * 32` whose
+    /// public half (`2152f8d...`) is the compile-time `APP_PUBLIC_KEY` in
+    /// debug/test builds (see `build.rs`).
+    #[test]
+    fn activate_copies_license_and_updates_state() {
+        use ed25519_dalek::{Signer, SigningKey};
+
+        // Fixed test seed whose public key is the compile-time APP_PUBLIC_KEY
+        // fallback (see build.rs).  This seed is test-only and publicly known.
+        let signing_key = SigningKey::from_bytes(&[0x42u8; 32]);
+
+        let mut license = LicenseFile {
+            license_id: "LIC-ACTIVATE-TEST".into(),
+            license_type: LicenseType::Commercial,
+            issued_to: "Test Corp".into(),
+            seats: 5,
+            expiry: "2099-01-01".into(),
+            features: vec!["editor".into(), "ocr".into()],
+            product: "PdfEditor".into(),
+            signature: String::new(),
+        };
+        let payload = build_payload(&license).unwrap();
+        let sig = signing_key.sign(payload.as_bytes());
+        license.signature = encode_base64(sig.to_bytes().as_ref());
+
+        // Write the signed license to a source temp file.
+        let source_dir = tempfile::tempdir().unwrap();
+        let source_path = source_dir.path().join("test.pdfeditor-license");
+        std::fs::write(&source_path, serde_json::to_string(&license).unwrap()).unwrap();
+
+        // Guard that restores (or removes) XDG_CONFIG_HOME even on panic,
+        // preventing this test from polluting parallel test environments.
+        struct EnvGuard {
+            key: &'static str,
+            old: Option<String>,
+        }
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                match &self.old {
+                    Some(v) => std::env::set_var(self.key, v),
+                    None => std::env::remove_var(self.key),
+                }
+            }
+        }
+        let _guard = EnvGuard {
+            key: "XDG_CONFIG_HOME",
+            old: std::env::var("XDG_CONFIG_HOME").ok(),
+        };
+
+        // Point XDG_CONFIG_HOME to an isolated tempdir so the test doesn't
+        // touch the developer's real license directory.
+        let storage_dir = tempfile::tempdir().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", storage_dir.path());
+
+        // Create a fresh manager; it should start in trial/personal state
+        // because the storage tempdir contains no license yet.
+        let mut mgr = LicenseManager::new();
+        assert_ne!(
+            mgr.current_license().license_type,
+            LicenseType::Commercial,
+            "should start non-commercial before activation"
+        );
+
+        // Activate the license.
+        mgr.activate(&source_path).expect("activate should succeed");
+
+        // State must now reflect the commercial license.
+        assert_eq!(
+            mgr.current_license().license_type,
+            LicenseType::Commercial,
+            "state should become Commercial after activation"
+        );
+
+        // The license file must have been persisted to the storage path.
+        let expected_dest = storage_dir.path().join("pdfeditor").join("license.json");
+        assert!(
+            expected_dest.exists(),
+            "license file should be copied to the storage path"
+        );
     }
 }

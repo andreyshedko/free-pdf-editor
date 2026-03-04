@@ -9,5 +9,6 @@ members = [
     "services/licensing",
     "services/telemetry",
     "platform/updater",
+    "tools/license-generator",
 ]
 resolver = "2"
