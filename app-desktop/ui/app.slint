@@ -34,6 +34,9 @@ export component AppWindow inherits Window {
     callback delete-current-page();
     callback rotate-current-page();
     callback upgrade-license();
+    /// Triggered when the user wants to activate a commercial license file.
+    /// The controller opens a file-picker, validates, copies and reloads.
+    callback activate-license();
 
     VerticalBox {
         padding: 0px;
@@ -165,6 +168,11 @@ export component AppWindow inherits Window {
                     text: "Upgrade";
                     visible: root.license-type == "Personal" || root.license-type == "Trial";
                     clicked => { root.upgrade-license(); }
+                }
+
+                Button {
+                    text: "Activate License";
+                    clicked => { root.activate-license(); }
                 }
             }
         }

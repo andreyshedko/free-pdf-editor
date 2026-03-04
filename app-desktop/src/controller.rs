@@ -183,6 +183,11 @@ impl AppController {
             });
         });
 
+        win.on_activate_license(move || {
+            let me = unsafe { &mut *ptr };
+            me.activate_license_dialog();
+        });
+
         // Display the initial license state in the UI.
         self.update_license_display();
     }
@@ -445,6 +450,38 @@ impl AppController {
             thread::spawn(move || {
                 let _ = tx.send(task);
             });
+        }
+    }
+
+    /// Opens a license file selected via environment variable and activates it.
+    ///
+    /// In a production desktop build this would show a native file-picker.
+    /// For now the path is read from the `ACTIVATE_LICENSE` environment variable
+    /// so that activation can be exercised non-interactively (e.g., in tests).
+    fn activate_license_dialog(&mut self) {
+        let path = match std::env::var("ACTIVATE_LICENSE") {
+            Ok(p) => std::path::PathBuf::from(p),
+            Err(_) => {
+                self.emit(DocumentEvent::StatusChanged {
+                    message: "Set ACTIVATE_LICENSE env var to the path of your .pdfeditor-license file".into(),
+                });
+                return;
+            }
+        };
+
+        match self.license.activate(&path) {
+            Ok(()) => {
+                self.update_license_display();
+                self.emit(DocumentEvent::StatusChanged {
+                    message: "Commercial license activated successfully.".into(),
+                });
+            }
+            Err(e) => {
+                tracing::warn!("license activation failed: {e}");
+                self.emit(DocumentEvent::StatusChanged {
+                    message: format!("License activation failed: {e}"),
+                });
+            }
         }
     }
 
