@@ -190,6 +190,170 @@ Tests cover (52 tests total):
 - `pdf-annotations` — add/remove annotation execute-and-undo, idempotent undo guard
 - `pdf-forms` — AcroForm field detection, `SetFieldValueCommand` execute-and-undo, `CreateFieldCommand` (all field kinds, multi-field, undo)
 
+## Publishing
+
+### Microsoft Store (Windows)
+
+The build script produces a signed **MSIX** package that can be submitted directly to
+[Microsoft Partner Center](https://partner.microsoft.com/dashboard).
+
+#### Prerequisites
+
+| Tool | Notes |
+|------|-------|
+| Windows SDK (`MakeAppx.exe`, `signtool.exe`) | Installed with Visual Studio or the standalone Windows SDK |
+| Rust target `x86_64-pc-windows-msvc` | `rustup target add x86_64-pc-windows-msvc` |
+| A code-signing certificate (PFX) | EV or standard certificate issued by a trusted CA |
+
+#### Required environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `WINDOWS_CERT_BASE64` | Base-64-encoded PFX certificate |
+| `WINDOWS_CERT_PASSWORD` | PFX certificate password |
+| `PUBLISHER` | Publisher identity string from Partner Center, e.g. `CN=Example, O=Example Inc, L=Redmond, S=Washington, C=US` |
+
+#### Steps
+
+1. **Register in Partner Center** — create a new app reservation at
+   [Partner Center](https://partner.microsoft.com/dashboard) and note your
+   *Publisher identity* (used as `PUBLISHER` above).
+
+2. **Update store metadata** — edit `store/metadata.json` to set
+   `windows_package_name` to the package name shown in Partner Center.
+
+3. **Set the version** — bump `version` and `build_number` in
+   `release/release.json`.
+
+4. **Build and package**
+
+   ```powershell
+   $Env:WINDOWS_CERT_BASE64   = "<base64 PFX>"
+   $Env:WINDOWS_CERT_PASSWORD = "<password>"
+   $Env:PUBLISHER             = "CN=..."
+   .\scripts\build_windows.ps1
+   # Output: dist\windows\FreePDFEditor_<VERSION>.msix
+   ```
+
+   Set `SKIP_SIGNING=1` to build without signing (local testing only —
+   Partner Center re-signs the package on ingestion, so you may omit signing
+   for Store submissions if your Partner Center account supports it).
+
+5. **Submit to the Store** — in Partner Center create a new submission, upload
+   `dist\windows\FreePDFEditor_<VERSION>.msix` as the package, fill in the
+   listing details, and click **Submit to certification**.
+
+---
+
+### Mac App Store (Apple)
+
+The build scripts produce a notarized **.pkg** installer. For the Mac App
+Store you need an *Apple Distribution* certificate instead of a Developer ID
+certificate; the notarization step is replaced by uploading directly through
+App Store Connect.
+
+#### Prerequisites
+
+| Tool | Notes |
+|------|-------|
+| Xcode Command Line Tools | `xcode-select --install` |
+| Rust targets for Apple Silicon and Intel | `rustup target add aarch64-apple-darwin x86_64-apple-darwin` |
+| Active Apple Developer Program membership | [developer.apple.com](https://developer.apple.com) |
+
+#### Required environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `APPLE_CERT_BASE64` | Base-64-encoded Distribution certificate (p12) — *"Apple Distribution: …"* or *"3rd Party Mac Developer Application: …"* |
+| `APPLE_CERT_PASSWORD` | Certificate password |
+| `APPLE_TEAM_ID` | 10-character Apple Developer Team ID |
+| `APPLE_SIGN_IDENTITY` | Full common name of the signing certificate, e.g. `Apple Distribution: Your Name (TEAMID)` |
+| `APPLE_INSTALLER_CERT_BASE64` | Base-64-encoded installer certificate (p12) — *"3rd Party Mac Developer Installer: …"* |
+| `APPLE_INSTALLER_CERT_PASSWORD` | Installer certificate password |
+| `APPLE_INSTALLER_SIGN_IDENTITY` | Full common name of the installer certificate, e.g. `3rd Party Mac Developer Installer: Your Name (TEAMID)` |
+| `APPLE_API_KEY_ID` | App Store Connect API key ID |
+| `APPLE_API_ISSUER_ID` | App Store Connect API issuer ID |
+| `APPLE_API_PRIVATE_KEY` | Contents of the `.p8` private key file |
+
+#### Steps
+
+1. **Create the app in App Store Connect** — go to
+   [appstoreconnect.apple.com](https://appstoreconnect.apple.com), create a
+   new macOS app, and note the *Bundle ID* (must match `bundle_id` in
+   `store/metadata.json`, currently `com.freepdfeditor.app`).
+
+2. **Create an App Store Connect API key** — in App Store Connect → Users and
+   Access → Integrations → App Store Connect API, generate a key with
+   *Developer* or *Admin* role and download the `.p8` file.
+
+3. **Export certificates from Xcode** — in Xcode → Settings → Accounts →
+   Manage Certificates, create and export:
+   - *Apple Distribution* (application signing)
+   - *3rd Party Mac Developer Installer* (package signing)
+
+4. **Update store metadata and version**
+
+   ```bash
+   # store/metadata.json  → set bundle_id, display_name, description
+   # release/release.json → bump version and build_number
+   ```
+
+5. **Build a universal binary**
+
+   ```bash
+   bash scripts/build_macos.sh
+   # Output: dist/macos/FreePDFEditor.app
+   ```
+
+   To build without signing (e.g. for testing):
+
+   ```bash
+   SKIP_SIGNING=1 bash scripts/build_macos.sh
+   ```
+
+6. **Sign and package**
+
+   ```bash
+   # Code-sign the .app bundle
+   export APPLE_CERT_BASE64="<base64 p12>"
+   export APPLE_CERT_PASSWORD="<password>"
+   export APPLE_TEAM_ID="<TEAMID>"
+   export APPLE_SIGN_IDENTITY="Apple Distribution: Your Name (TEAMID)"
+   bash scripts/sign_macos.sh
+
+   # Build the signed .pkg and submit for notarization
+   export APPLE_INSTALLER_CERT_BASE64="<base64 installer p12>"
+   export APPLE_INSTALLER_CERT_PASSWORD="<password>"
+   export APPLE_INSTALLER_SIGN_IDENTITY="3rd Party Mac Developer Installer: Your Name (TEAMID)"
+   export APPLE_API_KEY_ID="<key id>"
+   export APPLE_API_ISSUER_ID="<issuer id>"
+   export APPLE_API_PRIVATE_KEY="$(cat /path/to/AuthKey_KEYID.p8)"
+   bash scripts/notarize_macos.sh
+   # Output: dist/macos/FreePDFEditor_<VERSION>.pkg
+   ```
+
+7. **Upload to App Store Connect** — use Apple's *Transporter* app
+   ([download from Mac App Store](https://apps.apple.com/app/transporter/id1450874784))
+   or its bundled CLI:
+
+   ```bash
+   # Transporter CLI (installed with the Transporter app)
+   /Applications/Transporter.app/Contents/itms/bin/iTMSTransporter \
+     -m upload \
+     -f dist/macos/FreePDFEditor_<VERSION>.pkg \
+     -apiKey "$APPLE_API_KEY_ID" \
+     -apiIssuer "$APPLE_API_ISSUER_ID"
+   ```
+
+   Alternatively, open **Xcode → Organizer → Distribute App** and follow the
+   guided upload workflow.
+
+8. **Submit for review** — in App Store Connect, select the uploaded build,
+   complete the required metadata (screenshots, description, privacy details),
+   and click **Submit for Review**.
+
+---
+
 ## Extensibility
 
 Every new feature follows the same pattern:
