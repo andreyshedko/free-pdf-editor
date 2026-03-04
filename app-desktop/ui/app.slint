@@ -14,6 +14,10 @@ export component AppWindow inherits Window {
     in property <bool>   can-redo:      false;
     in property <string> document-title: "";
 
+    // License display (read-only from the UI; set by the controller).
+    in property <string> license-type:   "Personal";
+    in property <string> license-expiry: "";
+
     callback open-document();
     callback save-document();
     callback save-document-as();
@@ -29,6 +33,7 @@ export component AppWindow inherits Window {
     callback add-note();
     callback delete-current-page();
     callback rotate-current-page();
+    callback upgrade-license();
 
     VerticalBox {
         padding: 0px;
@@ -130,5 +135,40 @@ export component AppWindow inherits Window {
                 }
             }
         }
+
+        // License info bar – shows license type, expiry date, and upgrade button.
+        Rectangle {
+            height: 26px;
+            background: #f0f0f5;
+
+            HorizontalBox {
+                padding-top: 4px;
+                padding-bottom: 4px;
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 16px;
+                alignment: start;
+
+                Text {
+                    text: "License: " + root.license-type;
+                    font-size: 11px;
+                    color: #333;
+                }
+
+                Text {
+                    text: root.license-expiry != "" ? "Expires: " + root.license-expiry : "";
+                    font-size: 11px;
+                    color: #777;
+                }
+
+                Button {
+                    text: "Upgrade";
+                    visible: root.license-type == "Personal" || root.license-type == "Trial";
+                    clicked => { root.upgrade-license(); }
+                }
+            }
+        }
     }
 }
+
+
