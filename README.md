@@ -190,6 +190,151 @@ Tests cover (52 tests total):
 - `pdf-annotations` — add/remove annotation execute-and-undo, idempotent undo guard
 - `pdf-forms` — AcroForm field detection, `SetFieldValueCommand` execute-and-undo, `CreateFieldCommand` (all field kinds, multi-field, undo)
 
+## License management
+
+The application uses an **ED25519-signed** JSON license file to gate commercial features.
+The license system lives in `services/licensing` (runtime verification) and
+`tools/license-generator` (offline issuance CLI).
+
+### License types and included features
+
+| Type | `editor` | `forms` | `ocr` | `batch` | Notes |
+|------|:--------:|:-------:|:-----:|:-------:|-------|
+| `personal` | ✓ | | | | Free tier, no expiry |
+| `trial` | ✓ | ✓ | | | 14-day auto-trial on first launch |
+| `commercial` | ✓ | ✓ | ✓ | | Paid single-seat or multi-seat |
+| `enterprise` | ✓ | ✓ | ✓ | ✓ | Includes batch processing |
+
+### 1. Generate an ED25519 key pair
+
+The private key is used only by the license generator (never shipped with the app).
+The public key is embedded into the application at compile time.
+
+```bash
+# Requires Python 3 with the cryptography package:
+#   pip install cryptography
+python3 - <<'EOF'
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+key = Ed25519PrivateKey.generate()
+priv = key.private_bytes_raw().hex()
+pub  = key.public_key().public_bytes_raw().hex()
+print(f"Private key (keep secret): {priv}")
+print(f"Public key  (embed in app): {pub}")
+EOF
+```
+
+Store the **private key** securely (e.g. as `LICENSE_PRIVATE_KEY` in your CI
+secrets or a password manager).  The **public key** is embedded into production
+builds via the `APP_PUBLIC_KEY` environment variable (see step 5).
+
+### 2. Build the license-generator CLI
+
+```bash
+cargo build --release -p license-generator
+# Output: target/release/license-generator  (or .exe on Windows)
+```
+
+### 3. Generate a license file
+
+```bash
+export LICENSE_PRIVATE_KEY=<64-hex-char private key seed from step 1>
+
+# Personal license (no expiry)
+./target/release/license-generator generate \
+    --holder "Jane Doe" \
+    --email  jane@example.com \
+    --type   personal \
+    --seats  1
+
+# Commercial license, 5 seats, expires 2028-12-31
+./target/release/license-generator generate \
+    --holder "ACME Inc" \
+    --email  admin@acme.com \
+    --type   commercial \
+    --seats  5 \
+    --expiry 2028-12-31
+
+# Enterprise license
+./target/release/license-generator generate \
+    --holder "Big Corp" \
+    --email  licensing@bigcorp.com \
+    --type   enterprise \
+    --seats  50
+```
+
+Each run writes a `<holder>-<type>.pdfeditor-license` file to the current
+directory and prints the JSON to stdout.  Spaces and special characters in
+`--holder` are replaced with `_` and the name is lowercased, e.g.
+`"ACME Inc"` → `acme_inc-commercial.pdfeditor-license`.
+
+#### CLI flags
+
+| Flag | Required | Description |
+|------|:--------:|-------------|
+| `--holder <name>` | ✓ | License holder name (used in filename and `issued_to`) |
+| `--email <address>` | ✓ | Contact e-mail address |
+| `--type <type>` | ✓ | `personal` · `trial` · `commercial` · `enterprise` |
+| `--seats <n>` | | Number of seats (default: 1) |
+| `--expiry YYYY-MM-DD` | | Expiry date (default: `9999-12-31` = no expiry) |
+
+### 4. Inspect a license file
+
+```bash
+./target/release/license-generator inspect acme_inc-commercial.pdfeditor-license
+# License ID : LIC-20260101120000-AI-4321
+# Type       : commercial
+# Issued to  : ACME Inc <admin@acme.com>
+# Product    : PdfEditor
+# Seats      : 5
+# Expiry     : 2028-12-31
+# Features   : editor, ocr, forms
+# Signature  : AbCdEfGhIjKl…
+```
+
+### 5. Embed the public key in production builds
+
+Pass `APP_PUBLIC_KEY` when building the `licensing` crate (or the full app).
+The build script (`services/licensing/build.rs`) validates the key and bakes it
+in at compile time.
+
+```bash
+# Linux / macOS
+export APP_PUBLIC_KEY=<64-hex-char public key from step 1>
+cargo build --release --bin pdf-editor
+
+# Windows (PowerShell)
+$Env:APP_PUBLIC_KEY = "<64-hex-char public key>"
+cargo build --release --bin pdf-editor
+```
+
+> **Note:** If `APP_PUBLIC_KEY` is not set, a well-known test key is used
+> automatically for `debug` and `cargo test` builds.  Release builds will fail
+> at compile time without the variable.
+
+### 6. Activate a license on the end-user machine
+
+The application looks for `license.json` at the following platform-specific paths:
+
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\PdfEditor\license.json` |
+| macOS | `~/Library/Application Support/PdfEditor/license.json` |
+| Linux | `~/.config/pdfeditor/license.json` (or `$XDG_CONFIG_HOME/pdfeditor/license.json`) |
+
+Rename the generated `.pdfeditor-license` file to `license.json` and copy it
+to the appropriate path, **or** call `LicenseManager::activate()` from the
+application to copy and validate it programmatically:
+
+```rust
+use licensing::LicenseManager;
+let mut mgr = LicenseManager::new();
+mgr.activate(std::path::Path::new("/path/to/acme_inc-commercial.pdfeditor-license"))?;
+```
+
+The application re-reads the new license immediately — no restart required.
+
+---
+
 ## Publishing
 
 ### Microsoft Store (Windows)
