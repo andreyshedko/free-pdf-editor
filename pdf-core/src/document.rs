@@ -199,10 +199,19 @@ impl Document {
 
         let mut incr = IncrementalDocument::create_from(original_bytes.clone(), prev_doc);
 
-        // Copy all current objects into the new document section so they
-        // override the originals in the incremental cross-reference table.
+        // Only write changed or newly created objects into the incremental
+        // section. Objects that are identical to those in the original
+        // document are left out to keep the incremental update small.
         for (&id, obj) in &self.inner.objects {
-            incr.new_document.set_object(id, obj.clone());
+            match incr.original.objects.get(&id) {
+                // If the object exists in the original document and is
+                // byte-for-byte equal, we can skip re‑writing it.
+                Some(original_obj) if original_obj == obj => {}
+                // New or changed object: add it to the incremental section.
+                _ => {
+                    incr.new_document.set_object(id, obj.clone());
+                }
+            }
         }
         // Ensure max_id is at least as large as any object we inserted.
         if self.inner.max_id > incr.new_document.max_id {
