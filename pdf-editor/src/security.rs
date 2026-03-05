@@ -30,9 +30,25 @@ fn generate_file_id() -> Vec<u8> {
 }
 
 /// Ensure the document trailer contains a `/ID` array.  PDF encryption
-/// algorithms require this field; if it is missing we generate a random one.
+/// algorithms require this field; if it is missing or malformed we generate
+/// a new one.
 fn ensure_file_id(doc: &mut lopdf::Document) {
-    if doc.trailer.get(b"ID").is_err() {
+    let needs_new_id = match doc.trailer.get(b"ID") {
+        // Existing `/ID` is an array; verify it has exactly two string entries.
+        Ok(&Object::Array(ref arr)) => {
+            if arr.len() != 2 {
+                true
+            } else {
+                let is_string = |o: &Object| matches!(o, Object::String(..));
+                !(is_string(&arr[0]) && is_string(&arr[1]))
+            }
+        }
+        // Any other type, or missing `/ID`, requires generating a new one.
+        Ok(_) => true,
+        Err(_) => true,
+    };
+
+    if needs_new_id {
         let id = generate_file_id();
         doc.trailer.set(
             "ID",
