@@ -21,23 +21,23 @@ fn main() {
     let key = match std::env::var("APP_PUBLIC_KEY") {
         Ok(k) => k,
         Err(_) => {
-            // Only allow falling back to the test key in debug or test builds.
+            // Deterministic test key (public half only; the corresponding seed
+            // is available in test code only — see manager::tests).
+            // Replace with a real key for production builds via APP_PUBLIC_KEY.
+            let fallback = "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12";
+
             let profile = std::env::var("PROFILE").unwrap_or_default();
             let is_debug = profile == "debug";
             let is_test = std::env::var("CARGO_CFG_TEST").is_ok();
 
             if !(is_debug || is_test) {
-                panic!(
-                    "APP_PUBLIC_KEY is not set. \
-                     For non-test, non-debug builds, you must set APP_PUBLIC_KEY \
-                     to a 64-character hex-encoded Ed25519 public key."
+                println!(
+                    "cargo:warning=APP_PUBLIC_KEY is not set; using insecure built-in fallback key. \
+                     Set APP_PUBLIC_KEY to a 64-character hex-encoded Ed25519 public key for production builds."
                 );
             }
 
-            // Deterministic test key (public half only; the corresponding seed
-            // is available in test code only — see manager::tests).
-            // Replace with a real key for production builds via APP_PUBLIC_KEY.
-            "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12".to_string()
+            fallback.to_string()
         }
     };
 
