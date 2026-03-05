@@ -203,7 +203,7 @@ impl Document {
         // section. Objects that are identical to those in the original
         // document are left out to keep the incremental update small.
         for (&id, obj) in &self.inner.objects {
-            match incr.original.objects.get(&id) {
+            match incr.get_prev_documents().objects.get(&id) {
                 // If the object exists in the original document and is
                 // byte-for-byte equal, we can skip re‑writing it.
                 Some(original_obj) if original_obj == obj => {}

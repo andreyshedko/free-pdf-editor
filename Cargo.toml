@@ -3,6 +3,7 @@ members = [
     "pdf-core",
     "pdf-render",
     "pdf-editor",
+    "pdf-ocr",
     "pdf-annotations",
     "pdf-forms",
     "app-desktop",

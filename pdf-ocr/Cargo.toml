@@ -1,0 +1,10 @@
+[package]
+name = "pdf-ocr"
+version = "0.1.0"
+edition = "2021"
+description = "Tesseract-backed OcrProvider for pdf-core"
+
+[dependencies]
+pdf-core = { path = "../pdf-core" }
+tesseract = "0.15"
+tracing = "0.1"

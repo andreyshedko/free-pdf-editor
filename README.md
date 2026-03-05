@@ -120,6 +120,7 @@ safely on the UI thread.
 | Language | Rust (edition 2021) |
 | UI | [Slint](https://slint.dev) 1.9 |
 | PDF library | [lopdf](https://crates.io/crates/lopdf) 0.39 (document model) · [MuPDF](https://mupdf.com/) 1.23 via [mupdf](https://crates.io/crates/mupdf) 0.6 (rendering) |
+| OCR | [Tesseract](https://github.com/tesseract-ocr/tesseract) 5.x via [tesseract](https://crates.io/crates/tesseract) 0.15 (`pdf-ocr` crate) |
 | Build | Cargo workspace |
 | Targets | Windows · macOS · Linux |
 
@@ -128,7 +129,8 @@ safely on the UI thread.
 ```
 pdf-core          ← Document model, CommandHistory, EventBus, OCR/Plugin traits
 pdf-render        ← MuPdfRenderer, SoftwareRenderer (fallback), PageCache, TextBox
-pdf-editor        ← Page / text / security editing commands
+pdf-editor        ← Page / text / security / OCR editing commands
+pdf-ocr           ← TesseractOcrProvider — Tesseract-backed OcrProvider implementation
 pdf-annotations   ← Annotation CRUD commands + PDF I/O
 pdf-forms         ← AcroForm field detection, value commands, JSON export
 app-desktop       ← Slint UI, AppController, main entry point
@@ -140,6 +142,11 @@ app-desktop       ← Slint UI, AppController, main entry point
 
 - Rust ≥ 1.75
 - A system font library (fontconfig on Linux, built-in on macOS/Windows) for Slint
+- **Tesseract 5.x** headers and `libtesseract` (required to build `pdf-ocr`)
+  - Ubuntu/Debian: `sudo apt-get install libtesseract-dev tesseract-ocr`
+  - macOS: `brew install tesseract`
+  - Windows: install via [UB Mannheim tesseract installer](https://github.com/UB-Mannheim/tesseract/wiki)
+  - Language data (e.g. English): `sudo apt-get install tesseract-ocr-eng` (or set `TESSDATA_PREFIX` to point at your tessdata directory)
 
 ### Build
 
@@ -570,7 +577,7 @@ current implementation status.
 | `OcrProvider` abstraction | ✅ | Trait + `OcrResult` / `TextRegion` types |
 | `NoOpOcrProvider` stub | ✅ | Zero-dependency placeholder; returns empty results |
 | `ApplyOcrCommand` | ✅ | Embeds pre-computed OCR regions as an invisible text layer (render mode 3) on a PDF page; font registered in `/Resources/Font` |
-| Concrete OCR engine | 🔲 By design | Spec says "do NOT implement OCR directly" — plug in any `OcrProvider` implementation (e.g., Tesseract via `tesseract-rs`) at integration time |
+| `TesseractOcrProvider` | ✅ | `pdf-ocr` crate — Tesseract 5.x backed `OcrProvider`; parses TSV word-level bounding boxes; converts pixel coordinates to PDF points via configurable DPI |
 
 ### Security
 
