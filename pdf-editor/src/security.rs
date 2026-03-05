@@ -16,17 +16,19 @@ fn generate_file_id() -> Vec<u8> {
 
     static COUNTER: AtomicU64 = AtomicU64::new(1);
 
-    let nanos = SystemTime::now()
+    let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as u64)
-        .unwrap_or(0);
-    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
+        .unwrap_or_default();
+    let ts_nanos = duration.as_nanos();
+    let pid = std::process::id() as u128;
+    let count = COUNTER.fetch_add(1, Ordering::Relaxed) as u128;
 
-    // Combine the two 64-bit values into 16 bytes.
-    let mut id = Vec::with_capacity(16);
-    id.extend_from_slice(&nanos.to_le_bytes());
-    id.extend_from_slice(&count.to_le_bytes());
-    id
+    // Combine timestamp, process ID, and counter into 16 bytes.
+    let id_u128 = ts_nanos
+        ^ (pid << 32)
+        ^ (count & 0xffff_ffff);
+
+    id_u128.to_le_bytes().to_vec()
 }
 
 /// Ensure the document trailer contains a `/ID` array.  PDF encryption
