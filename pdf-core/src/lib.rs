@@ -9,5 +9,5 @@ pub use command::{CommandHistory, DocumentCommand};
 pub use document::{Document, MediaBox, Page};
 pub use error::PdfCoreError;
 pub use event::{DocumentEvent, EventBus};
-pub use ocr::{OcrProvider, OcrResult, TextRegion};
+pub use ocr::{NoOpOcrProvider, OcrProvider, OcrResult, TextRegion};
 pub use plugin::{Plugin, PluginContext};

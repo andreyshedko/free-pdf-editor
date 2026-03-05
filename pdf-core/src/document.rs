@@ -1,8 +1,9 @@
 use crate::error::PdfCoreError;
-use lopdf::{Document as LopdfDoc, Object};
+use lopdf::{Document as LopdfDoc, IncrementalDocument, Object};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{debug, info, instrument};
 
 pub use lopdf::ObjectId;
@@ -38,6 +39,10 @@ pub struct Document {
     pub title: String,
     pub path: PathBuf,
     inner: LopdfDoc,
+    /// Raw bytes of the file as it was originally loaded. Stored behind an
+    /// [`Arc`] so that cloning the reference during incremental saves is O(1)
+    /// and avoids doubling peak memory usage for large PDFs.
+    original_bytes: Option<Arc<[u8]>>,
 }
 
 impl std::fmt::Debug for Document {
@@ -55,7 +60,9 @@ impl Document {
     #[instrument(name = "document_open", fields(path = %path.as_ref().display()))]
     pub fn open(path: impl AsRef<Path>) -> Result<Self, PdfCoreError> {
         let path = path.as_ref();
-        let inner = LopdfDoc::load(path)
+        let original_bytes = std::fs::read(path)
+            .map_err(|e| PdfCoreError::Open(format!("{}: {}", path.display(), e)))?;
+        let inner = LopdfDoc::load_mem(&original_bytes)
             .map_err(|e| PdfCoreError::Open(format!("{}: {}", path.display(), e)))?;
 
         let mut h = DefaultHasher::new();
@@ -75,6 +82,7 @@ impl Document {
             title,
             path: path.to_path_buf(),
             inner,
+            original_bytes: Some(Arc::from(original_bytes.as_slice())),
         })
     }
 
@@ -94,6 +102,7 @@ impl Document {
             title,
             path: path.to_path_buf(),
             inner,
+            original_bytes: None,
         })
     }
 
@@ -158,6 +167,73 @@ impl Document {
             .map_err(|e| PdfCoreError::Save(format!("{}: {}", path.display(), e)))?;
         self.path = path.to_path_buf();
         info!(path = %path.display(), "document saved");
+        Ok(())
+    }
+
+    /// Save the document as an incremental update appended to the original file
+    /// bytes.  When the document was opened from disk the original raw bytes are
+    /// retained; the new revision is appended, making the resulting PDF smaller
+    /// than a full rewrite and preserving the original revision for auditing.
+    ///
+    /// If the document was created fresh (not loaded from disk) this falls back
+    /// to a regular [`save`][Self::save].
+    #[instrument(name = "document_save_incremental", skip(self), fields(path = %self.path.display()))]
+    pub fn save_incremental(&mut self) -> Result<(), PdfCoreError> {
+        let path = self.path.clone();
+        self.save_incremental_to(&path)
+    }
+
+    /// Like [`save_incremental`][Self::save_incremental] but writes to `path`.
+    #[instrument(name = "document_save_incremental_as", skip(self), fields(path = %path.as_ref().display()))]
+    pub fn save_incremental_to(&mut self, path: impl AsRef<Path>) -> Result<(), PdfCoreError> {
+        let path = path.as_ref();
+
+        let Some(original_bytes) = self.original_bytes.as_ref() else {
+            // No original bytes available (new document) – fall back to a
+            // regular full save.
+            return self.save_to(path);
+        };
+
+        // Clone the Arc pointer (O(1), no data copy) so we can pass a
+        // Vec<u8> to create_from without holding two full copies of the
+        // file bytes simultaneously.
+        let bytes_arc = Arc::clone(original_bytes);
+
+        // Load the original document to use as the base for the incremental update.
+        let prev_doc =
+            LopdfDoc::load_mem(&bytes_arc).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+
+        let mut incr = IncrementalDocument::create_from(bytes_arc.to_vec(), prev_doc);
+
+        // Only write changed or newly created objects into the incremental
+        // section. Objects that are identical to those in the original
+        // document are left out to keep the incremental update small.
+        for (&id, obj) in &self.inner.objects {
+            match incr.get_prev_documents().objects.get(&id) {
+                // If the object exists in the original document and is
+                // byte-for-byte equal, we can skip re‑writing it.
+                Some(original_obj) if original_obj == obj => {}
+                // New or changed object: add it to the incremental section.
+                _ => {
+                    incr.new_document.set_object(id, obj.clone());
+                }
+            }
+        }
+        // Ensure max_id is at least as large as any object we inserted.
+        if self.inner.max_id > incr.new_document.max_id {
+            incr.new_document.max_id = self.inner.max_id;
+        }
+
+        incr.save(path)
+            .map_err(|e| PdfCoreError::Save(format!("{}: {}", path.display(), e)))?;
+
+        // Update original_bytes to reflect the latest on-disk revision so that
+        // subsequent incremental saves chain correctly.
+        let new_bytes = std::fs::read(path)
+            .map_err(|e| PdfCoreError::Save(format!("{}: {}", path.display(), e)))?;
+        self.original_bytes = Some(Arc::from(new_bytes.as_slice()));
+        self.path = path.to_path_buf();
+        info!(path = %path.display(), "document saved incrementally");
         Ok(())
     }
 
@@ -473,5 +549,46 @@ mod tests {
         doc.save_to(out.path()).expect("save");
         let doc2 = Document::open(out.path()).expect("re-open");
         assert_eq!(doc2.page_count(), 1);
+    }
+
+    #[test]
+    fn save_incremental_roundtrip() {
+        let f = minimal_pdf();
+        let mut doc = Document::open(f.path()).expect("open");
+        let out = tempfile::NamedTempFile::new().expect("out temp");
+        doc.save_incremental_to(out.path())
+            .expect("save incremental");
+        // The resulting file must be loadable and preserve the page count.
+        let doc2 = Document::open(out.path()).expect("re-open");
+        assert_eq!(doc2.page_count(), 1);
+    }
+
+    #[test]
+    fn save_incremental_file_is_larger_than_original() {
+        // An incremental save appends a new revision, so the output is at
+        // least as large as the original raw bytes.
+        let f = minimal_pdf();
+        let original_size = std::fs::metadata(f.path()).unwrap().len();
+
+        let mut doc = Document::open(f.path()).expect("open");
+        let out = tempfile::NamedTempFile::new().expect("out temp");
+        doc.save_incremental_to(out.path())
+            .expect("save incremental");
+
+        let incremental_size = std::fs::metadata(out.path()).unwrap().len();
+        assert!(
+            incremental_size >= original_size,
+            "incremental file ({incremental_size} bytes) should be at least as large as the original ({original_size} bytes)"
+        );
+    }
+
+    #[test]
+    fn save_incremental_new_document_falls_back_to_regular_save() {
+        // Documents created with create_new() have no original bytes, so
+        // save_incremental() must fall back to a regular save.
+        let tmp = tempfile::NamedTempFile::new().expect("temp");
+        let mut doc = Document::create_new(tmp.path()).expect("create");
+        // Should not panic or error even without original bytes.
+        doc.save_incremental_to(tmp.path()).expect("fallback save");
     }
 }

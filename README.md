@@ -8,12 +8,13 @@ Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** U
 - Open existing PDF files via `Document::open`
 - Create new blank PDF documents via `Document::create_new`
 - Save documents in-place (`save`) or to a new path (`save_to`)
+- **Incremental saves** — `save_incremental` / `save_incremental_to` append a new revision to the original file bytes using `lopdf::IncrementalDocument`; falls back to a full rewrite for freshly-created documents
 - Page enumeration with accurate `MediaBox` dimensions
 - Text extraction per page via `Document::extract_text`
 - **Undo / Redo** — `CommandHistory` with configurable depth; every mutating
   operation implements the `DocumentCommand` trait and can be undone/redone
 - **Event bus** — `EventBus` / `DocumentEvent` for loosely-coupled UI updates
-- OCR provider trait (`OcrProvider`) for pluggable text recognition
+- OCR provider trait (`OcrProvider`) for pluggable text recognition; `NoOpOcrProvider` available as a zero-dependency stub
 - Plugin trait (`Plugin`) for future extension points
 
 ### Page rendering (`pdf-render`)
@@ -36,8 +37,9 @@ Cross-platform offline-first desktop PDF editor built with **Rust**, **Slint** U
 | `InsertImageCommand` | Embed a raw RGB bitmap as an uncompressed PDF Image XObject at a given position and display size | ✓ (snapshot) |
 | `ReplaceImageCommand` | Replace an existing Image XObject (by resource name) with new raw RGB data; optionally update display dimensions via the `cm` transform | ✓ (snapshot) |
 | `FontSubstitutionCommand` | Replace all `Tf` references to one font with another across a page's content streams; auto-registers standard Type1 fonts in `/Resources/Font` | ✓ (snapshot) |
-| `SetPasswordCommand` | Placeholder for owner-password protection | ✓ (snapshot) |
+| `SetPasswordCommand` | Apply RC4-128 owner-password encryption to the document using `lopdf`'s `EncryptionVersion::V2`; injects a `/ID` trailer entry when absent | ✓ (snapshot) |
 | `RedactRegionCommand` | Permanently remove text content within a region from the content streams and paint a filled black rectangle over it | ✓ (snapshot) |
+| `ApplyOcrCommand` | Apply pre-computed `OcrResult` regions as an invisible text layer (render mode 3) on a page, enabling text selection in conforming PDF viewers | ✓ (snapshot) |
 
 ### Annotations (`pdf-annotations`)
 Annotation types supported: **Highlight**, **Underline**, **Strikeout**,
@@ -118,6 +120,7 @@ safely on the UI thread.
 | Language | Rust (edition 2021) |
 | UI | [Slint](https://slint.dev) 1.9 |
 | PDF library | [lopdf](https://crates.io/crates/lopdf) 0.39 (document model) · [MuPDF](https://mupdf.com/) 1.23 via [mupdf](https://crates.io/crates/mupdf) 0.6 (rendering) |
+| OCR | [Tesseract](https://github.com/tesseract-ocr/tesseract) 5.x via [tesseract](https://crates.io/crates/tesseract) 0.15 (`pdf-ocr` crate) |
 | Build | Cargo workspace |
 | Targets | Windows · macOS · Linux |
 
@@ -126,7 +129,8 @@ safely on the UI thread.
 ```
 pdf-core          ← Document model, CommandHistory, EventBus, OCR/Plugin traits
 pdf-render        ← MuPdfRenderer, SoftwareRenderer (fallback), PageCache, TextBox
-pdf-editor        ← Page / text / security editing commands
+pdf-editor        ← Page / text / security / OCR editing commands
+pdf-ocr           ← TesseractOcrProvider — Tesseract-backed OcrProvider implementation
 pdf-annotations   ← Annotation CRUD commands + PDF I/O
 pdf-forms         ← AcroForm field detection, value commands, JSON export
 app-desktop       ← Slint UI, AppController, main entry point
@@ -138,6 +142,11 @@ app-desktop       ← Slint UI, AppController, main entry point
 
 - Rust ≥ 1.75
 - A system font library (fontconfig on Linux, built-in on macOS/Windows) for Slint
+- **Tesseract 5.x** headers and `libtesseract` (required to build `pdf-ocr`)
+  - Ubuntu/Debian: `sudo apt-get install libtesseract-dev tesseract-ocr`
+  - macOS: `brew install tesseract`
+  - Windows: install via [UB Mannheim tesseract installer](https://github.com/UB-Mannheim/tesseract/wiki)
+  - Language data (e.g. English): `sudo apt-get install tesseract-ocr-eng` (or set `TESSDATA_PREFIX` to point at your tessdata directory)
 
 ### Build
 
@@ -527,7 +536,7 @@ current implementation status.
 | Requirement | Status | Notes |
 |-------------|:------:|-------|
 | Open / save PDF | ✅ | |
-| Incremental saves | ❌ Not started | Every save rewrites the full document. lopdf 0.39 does not expose an incremental-write API. |
+| Incremental saves | ✅ | `save_incremental` / `save_incremental_to` use `lopdf::IncrementalDocument` to append a new xref section without rewriting the full file. Falls back to a full save for freshly-created documents. |
 | Undo / redo | ✅ | `CommandHistory` with configurable depth |
 | Page tree management | ✅ | |
 
@@ -566,13 +575,15 @@ current implementation status.
 | Requirement | Status | Notes |
 |-------------|:------:|-------|
 | `OcrProvider` abstraction | ✅ | Trait + `OcrResult` / `TextRegion` types |
-| Concrete OCR implementation | 🔲 By design | Spec says "do NOT implement OCR directly" — future provider slot |
+| `NoOpOcrProvider` stub | ✅ | Zero-dependency placeholder; returns empty results |
+| `ApplyOcrCommand` | ✅ | Embeds pre-computed OCR regions as an invisible text layer (render mode 3) on a PDF page; font registered in `/Resources/Font` |
+| `TesseractOcrProvider` | ✅ | `pdf-ocr` crate — Tesseract 5.x backed `OcrProvider`; parses TSV word-level bounding boxes; converts pixel coordinates to PDF points via configurable DPI |
 
 ### Security
 
 | Requirement | Status | Notes |
 |-------------|:------:|-------|
-| Password protection | ⚠️ Placeholder | `SetPasswordCommand` logs a warning; lopdf 0.39 has no encryption API. Requires a different PDF library or MuPDF to implement properly. |
+| Password protection | ✅ | `SetPasswordCommand` applies RC4-128 encryption via `lopdf::Document::encrypt` with `EncryptionVersion::V2`; injects `/ID` trailer entry when absent. |
 | Permissions | ❌ Not started | |
 | Redaction | ✅ | `RedactRegionCommand` now performs **true redaction**: decompresses all content streams, parses `BT…ET` text blocks, removes blocks whose text position falls within the target rectangle, then re-encodes the result into a single filtered stream. A filled black rectangle is added on top as a visual marker. Falls back to visual-only if content stream parsing fails. |
 
@@ -584,7 +595,7 @@ current implementation status.
 | Background rendering (off UI thread) | ✅ | Dedicated `render-worker` thread; `MuPdfRenderer::render_from_path` runs off the UI thread; results are handed back via `slint::invoke_from_event_loop`. The cache is shared via `Arc<Mutex<PageCache>>`. |
 | Lazy page loading | ❌ Not started | `Document::open` loads the full lopdf object graph at open time. |
 | `<100 ms` page navigation latency | ❌ Not measured | Achievable with real rendering (MuPDF) once integrated. |
-| Incremental saves | ❌ Not started | See document engine row above. |
+| Incremental saves | ✅ | `save_incremental` / `save_incremental_to` implemented. |
 
 ### Plugin system
 
