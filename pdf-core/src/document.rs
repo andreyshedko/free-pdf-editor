@@ -221,6 +221,11 @@ impl Document {
         incr.save(path)
             .map_err(|e| PdfCoreError::Save(format!("{}: {}", path.display(), e)))?;
 
+        // Update original_bytes to reflect the latest on-disk revision so that
+        // subsequent incremental saves chain correctly.
+        let new_bytes = std::fs::read(path)
+            .map_err(|e| PdfCoreError::Save(format!("{}: {}", path.display(), e)))?;
+        self.original_bytes = Some(new_bytes);
         self.path = path.to_path_buf();
         info!(path = %path.display(), "document saved incrementally");
         Ok(())
