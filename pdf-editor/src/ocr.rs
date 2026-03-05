@@ -44,11 +44,7 @@ impl DocumentCommand for ApplyOcrCommand {
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
         // If every region is empty there is nothing to write — return without
         // touching the document.
-        let has_text = self
-            .result
-            .regions
-            .iter()
-            .any(|r| !r.text.is_empty());
+        let has_text = self.result.regions.iter().any(|r| !r.text.is_empty());
         if !has_text {
             return Ok(());
         }
@@ -90,10 +86,7 @@ impl DocumentCommand for ApplyOcrCommand {
             // Position the text at the region origin (PDF y-axis up).
             ops.push(Operation::new(
                 "Td",
-                vec![
-                    Object::Real(region.x as f32),
-                    Object::Real(region.y as f32),
-                ],
+                vec![Object::Real(region.x as f32), Object::Real(region.y as f32)],
             ));
             ops.push(Operation::new(
                 "Tj",

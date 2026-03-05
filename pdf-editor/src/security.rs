@@ -24,9 +24,7 @@ fn generate_file_id() -> Vec<u8> {
     let count = COUNTER.fetch_add(1, Ordering::Relaxed) as u128;
 
     // Combine timestamp, process ID, and counter into 16 bytes.
-    let id_u128 = ts_nanos
-        ^ (pid << 32)
-        ^ (count & 0xffff_ffff);
+    let id_u128 = ts_nanos ^ (pid << 32) ^ (count & 0xffff_ffff);
 
     id_u128.to_le_bytes().to_vec()
 }

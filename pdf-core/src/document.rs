@@ -200,8 +200,8 @@ impl Document {
         let bytes_arc = Arc::clone(original_bytes);
 
         // Load the original document to use as the base for the incremental update.
-        let prev_doc = LopdfDoc::load_mem(&bytes_arc)
-            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        let prev_doc =
+            LopdfDoc::load_mem(&bytes_arc).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
         let mut incr = IncrementalDocument::create_from(bytes_arc.to_vec(), prev_doc);
 
@@ -556,7 +556,8 @@ mod tests {
         let f = minimal_pdf();
         let mut doc = Document::open(f.path()).expect("open");
         let out = tempfile::NamedTempFile::new().expect("out temp");
-        doc.save_incremental_to(out.path()).expect("save incremental");
+        doc.save_incremental_to(out.path())
+            .expect("save incremental");
         // The resulting file must be loadable and preserve the page count.
         let doc2 = Document::open(out.path()).expect("re-open");
         assert_eq!(doc2.page_count(), 1);
@@ -571,7 +572,8 @@ mod tests {
 
         let mut doc = Document::open(f.path()).expect("open");
         let out = tempfile::NamedTempFile::new().expect("out temp");
-        doc.save_incremental_to(out.path()).expect("save incremental");
+        doc.save_incremental_to(out.path())
+            .expect("save incremental");
 
         let incremental_size = std::fs::metadata(out.path()).unwrap().len();
         assert!(
