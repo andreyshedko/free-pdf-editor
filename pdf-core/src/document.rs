@@ -3,6 +3,7 @@ use lopdf::{Document as LopdfDoc, IncrementalDocument, Object};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{debug, info, instrument};
 
 pub use lopdf::ObjectId;
@@ -38,10 +39,10 @@ pub struct Document {
     pub title: String,
     pub path: PathBuf,
     inner: LopdfDoc,
-    /// Raw bytes of the file as it was originally loaded. Used by
-    /// [`Document::save_incremental`] to append a new revision without
-    /// rewriting the entire file.
-    original_bytes: Option<Vec<u8>>,
+    /// Raw bytes of the file as it was originally loaded. Stored behind an
+    /// [`Arc`] so that cloning the reference during incremental saves is O(1)
+    /// and avoids doubling peak memory usage for large PDFs.
+    original_bytes: Option<Arc<[u8]>>,
 }
 
 impl std::fmt::Debug for Document {
@@ -81,7 +82,7 @@ impl Document {
             title,
             path: path.to_path_buf(),
             inner,
-            original_bytes: Some(original_bytes),
+            original_bytes: Some(Arc::from(original_bytes.as_slice())),
         })
     }
 
@@ -193,11 +194,16 @@ impl Document {
             return self.save_to(path);
         };
 
+        // Clone the Arc pointer (O(1), no data copy) so we can pass a
+        // Vec<u8> to create_from without holding two full copies of the
+        // file bytes simultaneously.
+        let bytes_arc = Arc::clone(original_bytes);
+
         // Load the original document to use as the base for the incremental update.
-        let prev_doc = LopdfDoc::load_mem(original_bytes)
+        let prev_doc = LopdfDoc::load_mem(&bytes_arc)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
 
-        let mut incr = IncrementalDocument::create_from(original_bytes.clone(), prev_doc);
+        let mut incr = IncrementalDocument::create_from(bytes_arc.to_vec(), prev_doc);
 
         // Only write changed or newly created objects into the incremental
         // section. Objects that are identical to those in the original
@@ -225,7 +231,7 @@ impl Document {
         // subsequent incremental saves chain correctly.
         let new_bytes = std::fs::read(path)
             .map_err(|e| PdfCoreError::Save(format!("{}: {}", path.display(), e)))?;
-        self.original_bytes = Some(new_bytes);
+        self.original_bytes = Some(Arc::from(new_bytes.as_slice()));
         self.path = path.to_path_buf();
         info!(path = %path.display(), "document saved incrementally");
         Ok(())

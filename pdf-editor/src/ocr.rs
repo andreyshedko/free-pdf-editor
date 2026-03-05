@@ -1,6 +1,6 @@
 use lopdf::{
     content::{Content, Operation},
-    dictionary, Dictionary, Object, Stream,
+    dictionary, Object, Stream,
 };
 use pdf_core::{Document, DocumentCommand, OcrResult, PdfCoreError};
 
@@ -42,6 +42,17 @@ impl DocumentCommand for ApplyOcrCommand {
     }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
+        // If every region is empty there is nothing to write — return without
+        // touching the document.
+        let has_text = self
+            .result
+            .regions
+            .iter()
+            .any(|r| !r.text.is_empty());
+        if !has_text {
+            return Ok(());
+        }
+
         // Snapshot the document for undo.
         let mut buf = std::io::Cursor::new(Vec::new());
         doc.inner_mut()
@@ -152,46 +163,97 @@ impl DocumentCommand for ApplyOcrCommand {
 ///
 /// The font is a standard Type1 Helvetica font which is guaranteed to be
 /// available in all conforming PDF processors.
+///
+/// This function walks the `/Parent` chain to find the effective `/Resources`
+/// dictionary (including inherited resources) and dereferences indirect
+/// `/Resources` and `/Font` objects before merging in the new font entry.
+/// The merged dictionary is written inline on the page node so that the
+/// page-level resources shadow any inherited ancestor resources.
+///
+/// The font object is only created and added when `OcrHelvetica` is not
+/// already present in the resolved font dictionary, making repeated calls
+/// idempotent.
 fn ensure_ocr_font(doc: &mut Document, page_id: lopdf::ObjectId) -> Result<(), PdfCoreError> {
-    let helvetica_font_obj = Object::Dictionary({
-        let mut d = Dictionary::new();
+    // Walk up the /Parent chain to find the nearest /Resources dict,
+    // resolving indirect references along the way.
+    let mut resources_dict: lopdf::Dictionary = {
+        let inner = doc.inner();
+        let mut current_id = page_id;
+        let mut found: Option<lopdf::Dictionary> = None;
+
+        loop {
+            let dict_opt = inner
+                .get_object(current_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok());
+            let dict = match dict_opt {
+                Some(d) => d,
+                None => break,
+            };
+
+            if let Ok(res_obj) = dict.get(b"Resources") {
+                let resolved = if let Ok(res_id) = res_obj.as_reference() {
+                    inner
+                        .get_object(res_id)
+                        .ok()
+                        .and_then(|ro| ro.as_dict().ok())
+                        .cloned()
+                } else {
+                    res_obj.as_dict().ok().cloned()
+                };
+                if let Some(d) = resolved {
+                    found = Some(d);
+                    break;
+                }
+            }
+
+            // No /Resources here — follow /Parent if present.
+            match dict.get(b"Parent").ok().and_then(|p| p.as_reference().ok()) {
+                Some(parent_id) => current_id = parent_id,
+                None => break,
+            }
+        }
+
+        found.unwrap_or_default()
+    };
+
+    // Resolve the /Font sub-dictionary (may itself be an indirect reference).
+    let mut font_dict: lopdf::Dictionary = {
+        let font_obj = resources_dict.get(b"Font").ok().cloned();
+        match font_obj {
+            Some(Object::Reference(font_ref_id)) => doc
+                .inner()
+                .get_object(font_ref_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok())
+                .cloned()
+                .unwrap_or_else(lopdf::Dictionary::new),
+            Some(Object::Dictionary(d)) => d,
+            _ => lopdf::Dictionary::new(),
+        }
+    };
+
+    // Only create and register the font object when the entry is absent.
+    if font_dict.get(OCR_FONT_RESOURCE_NAME).is_err() {
+        let mut d = lopdf::Dictionary::new();
         d.set("Type", Object::Name(b"Font".to_vec()));
         d.set("Subtype", Object::Name(b"Type1".to_vec()));
         d.set("BaseFont", Object::Name(b"Helvetica".to_vec()));
-        d
-    });
-    let font_id = doc.inner_mut().add_object(helvetica_font_obj);
+        let font_id = doc.inner_mut().add_object(Object::Dictionary(d));
+        font_dict.set(OCR_FONT_RESOURCE_NAME, Object::Reference(font_id));
+    }
 
-    let inner = doc.inner_mut();
-    let page_dict = inner
+    resources_dict.set("Font", Object::Dictionary(font_dict));
+
+    // Write the effective Resources dict inline on the page node so it
+    // shadows (but does not destroy) ancestor-inherited resources.
+    doc.inner_mut()
         .get_object_mut(page_id)
         .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
         .as_dict_mut()
-        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
-
-    // Get or create the /Resources dictionary inline.
-    if !page_dict.has(b"Resources") {
-        page_dict.set("Resources", Object::Dictionary(Dictionary::new()));
-    }
-    let resources = page_dict
-        .get_mut(b"Resources")
         .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
-        .as_dict_mut()
-        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        .set("Resources", Object::Dictionary(resources_dict));
 
-    if !resources.has(b"Font") {
-        resources.set("Font", Object::Dictionary(Dictionary::new()));
-    }
-    let fonts = resources
-        .get_mut(b"Font")
-        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
-        .as_dict_mut()
-        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
-
-    // Only add the font entry if it isn't already present (idempotent).
-    if !fonts.has(OCR_FONT_RESOURCE_NAME) {
-        fonts.set(OCR_FONT_RESOURCE_NAME, Object::Reference(font_id));
-    }
     Ok(())
 }
 
@@ -322,8 +384,15 @@ mod tests {
 
         let result = OcrResult {
             page_index: 99,
-            regions: vec![],
-            full_text: String::new(),
+            regions: vec![TextRegion {
+                text: "hello".to_owned(),
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 12.0,
+                confidence: 0.9,
+            }],
+            full_text: "hello".to_owned(),
         };
         let mut cmd = ApplyOcrCommand::new(result);
         assert!(cmd.execute(&mut doc).is_err());

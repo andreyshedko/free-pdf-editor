@@ -37,7 +37,7 @@ fn generate_file_id() -> Vec<u8> {
 fn ensure_file_id(doc: &mut lopdf::Document) {
     let needs_new_id = match doc.trailer.get(b"ID") {
         // Existing `/ID` is an array; verify it has exactly two string entries.
-        Ok(&Object::Array(ref arr)) => {
+        Ok(Object::Array(arr)) => {
             if arr.len() != 2 {
                 true
             } else {
