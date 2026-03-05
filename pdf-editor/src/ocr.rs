@@ -74,7 +74,7 @@ impl DocumentCommand for ApplyOcrCommand {
                     Object::Real(region.height as f32),
                 ],
             ));
-            // Render mode 3 = invisible (clip).
+            // Render mode 3 = invisible (does not modify clipping path).
             ops.push(Operation::new("Tr", vec![Object::Integer(3)]));
             // Position the text at the region origin (PDF y-axis up).
             ops.push(Operation::new(
