@@ -7,9 +7,9 @@ use pdf_core::{Document, DocumentCommand, PdfCoreError};
 
 /// Generate a 16-byte unique identifier for the PDF file `/ID` entry.
 ///
-/// The value combines the current time, process ID, and a monotonically
-/// increasing counter so that every call produces a different result, which is
-/// the primary requirement for a PDF file identifier.
+/// The value combines the current time's sub-second nanoseconds with a
+/// monotonically increasing counter so that every call produces a different
+/// result, which is the primary requirement for a PDF file identifier.
 fn generate_file_id() -> Vec<u8> {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
