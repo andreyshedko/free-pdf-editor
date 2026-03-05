@@ -24,3 +24,26 @@ pub trait OcrProvider: Send + Sync {
         height: u32,
     ) -> Result<OcrResult, Box<dyn std::error::Error + Send + Sync>>;
 }
+
+/// A no-op [`OcrProvider`] that always returns an empty result.
+///
+/// Useful as a placeholder when no real OCR engine is available, and for
+/// testing infrastructure that depends on an `OcrProvider`.
+#[derive(Debug, Default)]
+pub struct NoOpOcrProvider;
+
+impl OcrProvider for NoOpOcrProvider {
+    fn recognize(
+        &self,
+        page_index: u32,
+        _page_image: &[u8],
+        _width: u32,
+        _height: u32,
+    ) -> Result<OcrResult, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(OcrResult {
+            page_index,
+            regions: Vec::new(),
+            full_text: String::new(),
+        })
+    }
+}

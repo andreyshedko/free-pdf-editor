@@ -1,8 +1,48 @@
 use lopdf::{
     content::{Content, Operation},
+    encryption::{EncryptionVersion, Permissions},
     Object, Stream,
 };
 use pdf_core::{Document, DocumentCommand, PdfCoreError};
+
+/// Generate a 16-byte unique identifier for the PDF file `/ID` entry.
+///
+/// The value combines the current time, process ID, and a monotonically
+/// increasing counter so that every call produces a different result, which is
+/// the primary requirement for a PDF file identifier.
+fn generate_file_id() -> Vec<u8> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0);
+    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    // Combine the two 64-bit values into 16 bytes.
+    let mut id = Vec::with_capacity(16);
+    id.extend_from_slice(&nanos.to_le_bytes());
+    id.extend_from_slice(&count.to_le_bytes());
+    id
+}
+
+/// Ensure the document trailer contains a `/ID` array.  PDF encryption
+/// algorithms require this field; if it is missing we generate a random one.
+fn ensure_file_id(doc: &mut lopdf::Document) {
+    if doc.trailer.get(b"ID").is_err() {
+        let id = generate_file_id();
+        doc.trailer.set(
+            "ID",
+            Object::Array(vec![
+                Object::string_literal(id.as_slice()),
+                Object::string_literal(id.as_slice()),
+            ]),
+        );
+    }
+}
 
 #[derive(Debug)]
 pub struct SetPasswordCommand {
@@ -25,20 +65,39 @@ impl DocumentCommand for SetPasswordCommand {
     }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
+        // Snapshot the current state so we can undo.
         let mut buf = std::io::Cursor::new(Vec::new());
         doc.inner_mut()
             .save_to(&mut buf)
             .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
         self.snapshot = Some(buf.into_inner());
-        // Note: lopdf 0.39 does not expose a direct encrypt API.
-        // Password protection requires a PDF library with encryption support.
-        if !self.password.is_empty() {
-            tracing::warn!(
-                "password protection requested but lopdf 0.39 does not support \
-                 encryption; document will not be encrypted"
-            );
+
+        if self.password.is_empty() {
+            // Nothing to do for an empty password.
+            tracing::info!("password cleared (no encryption applied for empty password)");
+            return Ok(());
         }
-        tracing::info!("password set (placeholder - lopdf encryption not available in 0.39)");
+
+        // The PDF encryption algorithm requires a file identifier in /ID.
+        ensure_file_id(doc.inner_mut());
+
+        // Build an RC4-128 encryption state (PDF 1.4 / V2) using the
+        // provided password as both the user and owner password.
+        let enc_version = EncryptionVersion::V2 {
+            document: doc.inner(),
+            owner_password: &self.password,
+            user_password: &self.password,
+            key_length: 128,
+            permissions: Permissions::default(),
+        };
+        let enc_state = lopdf::EncryptionState::try_from(enc_version)
+            .map_err(|e| PdfCoreError::InvalidArgument(e.to_string()))?;
+
+        doc.inner_mut()
+            .encrypt(&enc_state)
+            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+
+        tracing::info!("document encrypted with RC4-128 password protection");
         Ok(())
     }
 
@@ -528,5 +587,54 @@ mod tests {
         let mut doc = Document::open(f.path()).expect("open");
         let mut cmd = RedactRegionCommand::new(99, 0.0, 0.0, 100.0, 100.0);
         assert!(cmd.execute(&mut doc).is_err());
+    }
+
+    /// After executing SetPasswordCommand the document should be encrypted.
+    #[test]
+    fn set_password_encrypts_document() {
+        let f = pdf_with_text_at(100.0, 100.0);
+        let mut doc = Document::open(f.path()).expect("open");
+
+        let mut cmd = SetPasswordCommand::new("s3cr3t");
+        cmd.execute(&mut doc).expect("execute");
+
+        assert!(
+            doc.inner().is_encrypted(),
+            "document should be encrypted after SetPasswordCommand"
+        );
+    }
+
+    /// Undo must restore the unencrypted document.
+    #[test]
+    fn set_password_undo_removes_encryption() {
+        let f = pdf_with_text_at(100.0, 100.0);
+        let mut doc = Document::open(f.path()).expect("open");
+
+        let was_encrypted_before = doc.inner().is_encrypted();
+
+        let mut cmd = SetPasswordCommand::new("s3cr3t");
+        cmd.execute(&mut doc).expect("execute");
+        cmd.undo(&mut doc).expect("undo");
+
+        assert_eq!(
+            doc.inner().is_encrypted(),
+            was_encrypted_before,
+            "undo should restore the pre-encryption state"
+        );
+    }
+
+    /// An empty password should be a no-op (document remains unencrypted).
+    #[test]
+    fn set_password_empty_is_noop() {
+        let f = pdf_with_text_at(100.0, 100.0);
+        let mut doc = Document::open(f.path()).expect("open");
+
+        let mut cmd = SetPasswordCommand::new("");
+        cmd.execute(&mut doc).expect("execute");
+
+        assert!(
+            !doc.inner().is_encrypted(),
+            "empty password should not encrypt the document"
+        );
     }
 }
