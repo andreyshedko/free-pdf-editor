@@ -3,6 +3,16 @@ use lopdf::{Dictionary, Object, ObjectId};
 use pdf_core::{Document, PdfCoreError};
 use tracing::{debug, instrument};
 
+fn pdf_text(obj: &Object) -> Option<String> {
+    lopdf::decode_text_string(obj)
+        .ok()
+        .or_else(|| {
+            obj.as_str()
+                .ok()
+                .map(|b| String::from_utf8_lossy(b).into_owned())
+        })
+}
+
 #[instrument(skip(doc, annotation), fields(page = annotation.page_index, kind = annotation.pdf_subtype()))]
 pub fn write_annotation(
     doc: &mut Document,
@@ -26,7 +36,9 @@ pub fn write_annotation(
         Object::Name(annotation.pdf_subtype().as_bytes().to_vec()),
     );
     dict.set("Rect", rect);
-    dict.set("NM", Object::string_literal(annotation.id.0.clone()));
+    // Explicit page link improves compatibility across renderers.
+    dict.set("P", Object::Reference(page_id));
+    dict.set("NM", lopdf::text_string(&annotation.id.0));
 
     match &annotation.kind {
         AnnotationKind::Highlight { color }
@@ -34,11 +46,34 @@ pub fn write_annotation(
         | AnnotationKind::Strikeout { color } => {
             dict.set("C", color_array(color));
             dict.set("CA", Object::Real(color.a));
+            // Text markup annotations require QuadPoints to be visible in many viewers.
+            let x1 = r.x;
+            let y1 = r.y;
+            let x2 = r.x + r.width;
+            let y2 = r.y + r.height;
+            dict.set(
+                "QuadPoints",
+                Object::Array(vec![
+                    Object::Real(x1),
+                    Object::Real(y2),
+                    Object::Real(x2),
+                    Object::Real(y2),
+                    Object::Real(x1),
+                    Object::Real(y1),
+                    Object::Real(x2),
+                    Object::Real(y1),
+                ]),
+            );
         }
         AnnotationKind::Note { author, content } => {
-            dict.set("T", Object::string_literal(author.clone()));
-            dict.set("Contents", Object::string_literal(content.clone()));
-            dict.set("Open", Object::Boolean(false));
+            dict.set("T", lopdf::text_string(author));
+            dict.set("Contents", lopdf::text_string(content));
+            dict.set("Open", Object::Boolean(true));
+            dict.set("Name", Object::Name(b"Note".to_vec()));
+            dict.set(
+                "C",
+                Object::Array(vec![Object::Real(1.0), Object::Real(0.92), Object::Real(0.25)]),
+            );
         }
         AnnotationKind::Drawing {
             color,
@@ -116,11 +151,7 @@ pub fn remove_annotation(
             if let Ok(obj) = inner.get_object(*ref_id) {
                 if let Ok(dict) = obj.as_dict() {
                     if let Ok(nm) = dict.get(b"NM") {
-                        let nm_str = nm
-                            .as_str()
-                            .ok()
-                            .map(|b| String::from_utf8_lossy(b).into_owned())
-                            .unwrap_or_default();
+                        let nm_str = pdf_text(nm).unwrap_or_default();
                         if nm_str == annotation_id.0 {
                             target_id = Some(*ref_id);
                             break;
@@ -147,6 +178,121 @@ pub fn remove_annotation(
     page_dict.set("Annots", Object::Array(new_annots));
 
     Ok(())
+}
+
+/// Remove an annotation from `Annots` by lopdf object id.
+///
+/// This path is resilient when metadata fields like `NM` are absent or
+/// normalized by another producer/editor.
+pub fn remove_annotation_by_object_id(
+    doc: &mut Document,
+    page_index: u32,
+    target: ObjectId,
+) -> Result<(), PdfCoreError> {
+    let page = doc.get_page(page_index)?;
+    let page_id = page.object_id;
+    let inner = doc.inner_mut();
+
+    let annots_arr = inner
+        .get_object(page_id)
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+        .as_dict()
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+        .get(b"Annots")
+        .ok()
+        .and_then(|o| o.as_array().ok())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut found = false;
+    let new_annots: Vec<Object> = annots_arr
+        .into_iter()
+        .filter(|o| {
+            let keep = o.as_reference().ok() != Some(target);
+            if !keep {
+                found = true;
+            }
+            keep
+        })
+        .collect();
+
+    if !found {
+        return Err(PdfCoreError::AnnotationNotFound(format!(
+            "{}:{}",
+            target.0, target.1
+        )));
+    }
+
+    let page_dict = inner
+        .get_object_mut(page_id)
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+        .as_dict_mut()
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+    page_dict.set("Annots", Object::Array(new_annots));
+
+    Ok(())
+}
+
+/// Update `Contents` for a note annotation identified by object id.
+///
+/// Returns the previous note content so callers can implement undo.
+pub fn update_note_content_by_object_id(
+    doc: &mut Document,
+    page_index: u32,
+    target: ObjectId,
+    new_content: &str,
+) -> Result<String, PdfCoreError> {
+    let page = doc.get_page(page_index)?;
+    let page_id = page.object_id;
+    let inner = doc.inner_mut();
+
+    let annots_arr = inner
+        .get_object(page_id)
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+        .as_dict()
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+        .get(b"Annots")
+        .ok()
+        .and_then(|o| o.as_array().ok())
+        .cloned()
+        .unwrap_or_default();
+
+    let exists_on_page = annots_arr
+        .iter()
+        .any(|o| o.as_reference().ok() == Some(target));
+    if !exists_on_page {
+        return Err(PdfCoreError::AnnotationNotFound(format!(
+            "{}:{}",
+            target.0, target.1
+        )));
+    }
+
+    let annot_dict = inner
+        .get_object_mut(target)
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+        .as_dict_mut()
+        .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+
+    let is_note = annot_dict
+        .get(b"Subtype")
+        .ok()
+        .and_then(|o| o.as_name().ok())
+        .map(|n| n == b"Text" || n == b"FreeText")
+        .unwrap_or(false);
+    if !is_note {
+        return Err(PdfCoreError::LopdfError(
+            "target annotation is not a note".to_owned(),
+        ));
+    }
+
+    let old_content = annot_dict
+        .get(b"Contents")
+        .ok()
+        .and_then(pdf_text)
+        .unwrap_or_default();
+
+    annot_dict.set("Contents", lopdf::text_string(new_content));
+    Ok(old_content)
 }
 
 /// Find the lopdf `ObjectId` of the annotation whose `NM` field matches `annotation_id`.
@@ -177,11 +323,7 @@ pub fn find_annotation_object_id(
             if let Ok(obj) = inner.get_object(*ref_id) {
                 if let Ok(dict) = obj.as_dict() {
                     if let Ok(nm) = dict.get(b"NM") {
-                        let nm_str = nm
-                            .as_str()
-                            .ok()
-                            .map(|b| String::from_utf8_lossy(b).into_owned())
-                            .unwrap_or_default();
+                        let nm_str = pdf_text(nm).unwrap_or_default();
                         if nm_str == annotation_id.0 {
                             return Ok(*ref_id);
                         }
@@ -253,8 +395,7 @@ fn parse_annotation(dict: &Dictionary, page_index: u32, obj_id: ObjectId) -> Opt
     let nm = dict
         .get(b"NM")
         .ok()
-        .and_then(|o| o.as_str().ok())
-        .map(|b| String::from_utf8_lossy(b).into_owned())
+        .and_then(pdf_text)
         .unwrap_or_else(|| format!("{}-{}", obj_id.0, obj_id.1));
 
     let kind = match subtype.as_str() {
@@ -267,18 +408,16 @@ fn parse_annotation(dict: &Dictionary, page_index: u32, obj_id: ObjectId) -> Opt
         "StrikeOut" => AnnotationKind::Strikeout {
             color: Color::red(),
         },
-        "Text" => {
+        "Text" | "FreeText" => {
             let content = dict
                 .get(b"Contents")
                 .ok()
-                .and_then(|o| o.as_str().ok())
-                .map(|b| String::from_utf8_lossy(b).into_owned())
+                .and_then(pdf_text)
                 .unwrap_or_default();
             let author = dict
                 .get(b"T")
                 .ok()
-                .and_then(|o| o.as_str().ok())
-                .map(|b| String::from_utf8_lossy(b).into_owned())
+                .and_then(pdf_text)
                 .unwrap_or_default();
             AnnotationKind::Note { author, content }
         }

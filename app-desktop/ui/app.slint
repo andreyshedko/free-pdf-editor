@@ -1,65 +1,247 @@
-import { Button, HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, HorizontalBox, LineEdit, VerticalBox, ScrollView, Slider } from "std-widgets.slint";
+
+component NativeMenuItem inherits Rectangle {
+    in property <string> label: "";
+    in property <string> shortcut: "";
+    in property <bool> enabled: true;
+    in property <bool> dark-theme: true;
+    callback activated();
+
+    height: 24px;
+    border-radius: 3px;
+    border-width: 0px;
+    background: !root.enabled ? transparent
+        : area.pressed ? (root.dark-theme ? #0a1020 : #cbd5e1)
+        : area.has-hover ? (root.dark-theme ? #1f2937 : #e2e8f0)
+        : transparent;
+
+    HorizontalBox {
+        padding-left: 8px;
+        padding-right: 8px;
+        alignment: start;
+        spacing: 8px;
+
+        Text {
+            text: root.label;
+            color: root.enabled
+                ? (area.pressed ? (root.dark-theme ? #f8fafc : #0f172a)
+                    : (root.dark-theme ? #e2e8f0 : #334155))
+                : (root.dark-theme ? #64748b : #94a3b8);
+            font-size: 12px;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.shortcut;
+            color: root.enabled
+                ? (area.pressed ? (root.dark-theme ? #cbd5e1 : #334155)
+                    : (root.dark-theme ? #94a3b8 : #64748b))
+                : (root.dark-theme ? #475569 : #94a3b8);
+            font-size: 11px;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+    }
+
+    area := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        clicked => {
+            root.activated();
+        }
+    }
+}
 
 export component AppWindow inherits Window {
-    title: "Free PDF Editor";
+    title: root.tr_app_title;
     min-width: 900px;
     min-height: 700px;
-    background: #0b1220;
+    background: root.color-bg;
 
     in property <image>  page-image;
     in property <string> status-text:   "Ready";
     in property <int>    page-count:    0;
     in property <int>    current-page:  0;
     in property <float>  zoom-level:    1.0;
+    in property <float>  page-width:    595.0;
+    in property <float>  page-height:   842.0;
     in property <bool>   can-undo:      false;
     in property <bool>   can-redo:      false;
     in property <string> document-title: "";
     in property <image>  thumbnail-image;
+    in property <int>    recent-count: 0;
+    in property <string> recent-a: "";
+    in property <string> recent-b: "";
+    in property <string> recent-c: "";
+    in property <string> recent-d: "";
+    in property <string> recent-e: "";
+    in property <int>    image-resource-count: 0;
+    in property <string> image-resource-a: "";
+    in property <string> image-resource-b: "";
+    in property <string> image-resource-c: "";
+    in property <string> image-resource-d: "";
+    in property <string> image-resource-e: "";
+    in property <string> image-resource-f: "";
+    in property <string> image-resource-g: "";
+    in property <string> image-resource-h: "";
+    in property <string> image-resource-i: "";
+    in property <string> image-resource-j: "";
+    in property <bool>   image-resource-has-prev: false;
+    in property <bool>   image-resource-has-next: false;
+    in property <string> image-resource-page-label: "";
+    in property <int>    image-resource-selected-visible-index: -1;
+    in property <string> image-resource-selected-name: "";
+    in property <bool>   image-edit-controls-visible: false;
+    in property <float>  image-edit-controls-x: 0;
+    in property <float>  image-edit-controls-y: 0;
+    in-out property <string> image-edit-width-text: "";
+    in-out property <string> image-edit-height-text: "";
+    in-out property <bool>   image-edit-keep-aspect: true;
+    in property <bool>   text-edit-controls-visible: false;
+    in property <float>  text-edit-controls-x: 0;
+    in property <float>  text-edit-controls-y: 0;
+    in-out property <string> text-edit-content-text: "";
+    in-out property <string> text-edit-font-text: "Helvetica";
+    in-out property <string> text-edit-size-text: "14";
+    property <[string]> text-font-model: [
+        "Helvetica",
+        "Helvetica-Bold",
+        "Helvetica-Oblique",
+        "Helvetica-BoldOblique",
+        "Times-Roman",
+        "Times-Bold",
+        "Times-Italic",
+        "Times-BoldItalic",
+        "Courier",
+        "Courier-Bold",
+        "Courier-Oblique",
+        "Courier-BoldOblique"
+    ];
+    in property <bool>   image-drag-active: false;
+    in property <bool>   dark-theme: true;
     property <int> active-menu: 0;
     property <bool> compact-mode: false;
     property <bool> menu-open: false;
+    property <bool> tools-image-submenu-open: false;
+    property <bool> file-open-recent-row-hover: false;
+    property <bool> file-open-recent-menu-hover: false;
+    property <bool> file-open-recent-visible: root.file-open-recent-row-hover || root.file-open-recent-menu-hover;
     property <bool> has-document: root.page-count > 0;
     property <length> menu-button-width: root.compact-mode ? 86px : 96px;
     property <length> menu-row-spacing: root.compact-mode ? 6px : 8px;
     property <length> header-height: root.compact-mode ? 72px : 86px;
-    property <[string]> menu-model: ["[F] File", "[E] Edit", "[V] View", "[A] Annotate", "[P] Page", "[T] Tools", "[L] License"];
+    property <int> menu-content-count:
+        root.active-menu == 0 ? 6 :
+        root.active-menu == 1 ? 2 :
+        root.active-menu == 2 ? 3 :
+        root.active-menu == 3 ? 2 :
+        root.active-menu == 4 ? 4 :
+        root.active-menu == 5 ? 13 :
+        2;
+    property <length> menu-dropdown-height:
+        ((root.menu-content-count + 2) * (root.compact-mode ? 24px : 28px)) + (root.compact-mode ? 14px : 16px);
+    property <[string]> menu-model: [root.tr_menu_file, root.tr_menu_edit, root.tr_menu_view, root.tr_menu_annotate, root.tr_menu_page, root.tr_menu_tools, root.tr_menu_license];
     property <string> active-menu-label:
-        root.active-menu == 0 ? "[F] File" :
-        root.active-menu == 1 ? "[E] Edit" :
-        root.active-menu == 2 ? "[V] View" :
-        root.active-menu == 3 ? "[A] Annotate" :
-        root.active-menu == 4 ? "[P] Page" :
-        root.active-menu == 5 ? "[T] Tools" :
-        "[L] License";
+        root.active-menu == 0 ? root.tr_menu_file :
+        root.active-menu == 1 ? root.tr_menu_edit :
+        root.active-menu == 2 ? root.tr_menu_view :
+        root.active-menu == 3 ? root.tr_menu_annotate :
+        root.active-menu == 4 ? root.tr_menu_page :
+        root.active-menu == 5 ? root.tr_menu_tools :
+        root.tr_menu_license;
     property <string> shortcut-tooltip:
         root.active-menu == 0 ? "[O] Open: Ctrl+O\n[S] Save: Ctrl+S\n[SA] Save As: Ctrl+Shift+S" :
         root.active-menu == 1 ? "[U] Undo: Ctrl+Z\n[R] Redo: Ctrl+Y" :
-        root.active-menu == 2 ? "[+] Zoom +: Ctrl++\n[-] Zoom -: Ctrl+-\n[1] 100%: Ctrl+0" :
+        root.active-menu == 2 ? "[+] Zoom +: Ctrl++ or Ctrl+Up\n[-] Zoom -: Ctrl+- or Ctrl+Down\n[1] 100%: Ctrl+0" :
         root.active-menu == 4 ? "[>] Next: PageDown or RightArrow\n[<] Prev: PageUp or LeftArrow" :
         "No keyboard shortcuts assigned for this menu.";
 
-    property <brush> color-bg: #0b1220;
-    property <brush> color-header: #101a2e;
-    property <brush> color-header-2: #1a2742;
-    property <brush> color-panel: #121c30;
-    property <brush> color-panel-soft: #1a2740;
-    property <brush> color-border: #2c3c5b;
-    property <brush> color-text: #e7ecf4;
-    property <brush> color-muted: #9eb0cb;
-    property <brush> color-accent: #2dd4bf;
-    property <brush> color-canvas: #edf2ff;
+    property <brush> color-bg: root.dark-theme ? #0b1220 : #f8fafc;
+    property <brush> color-header: root.dark-theme ? #111827 : #f1f5f9;
+    property <brush> color-header-2: root.dark-theme ? #1f2937 : #e2e8f0;
+    property <brush> color-panel: root.dark-theme ? #0f172a : #ffffff;
+    property <brush> color-panel-soft: root.dark-theme ? #1e293b : #f8fafc;
+    property <brush> color-border: root.dark-theme ? #334155 : #cbd5e1;
+    property <brush> color-text: root.dark-theme ? #e2e8f0 : #0f172a;
+    property <brush> color-muted: root.dark-theme ? #94a3b8 : #64748b;
+    property <brush> color-accent: root.dark-theme ? #38bdf8 : #0ea5e9;
+    property <brush> color-canvas: root.dark-theme ? #0b1220 : #e2e8f0;
+    property <brush> color-menu-hover: root.dark-theme ? #1f2937 : #e2e8f0;
+    property <brush> color-menu-active: root.dark-theme ? #0a1020 : #cbd5e1;
 
     // License display (read-only from the UI; set by the controller).
     in property <string> license-type:   "Personal";
     in property <string> license-expiry: "";
 
+    // Localized UI strings.
+    in property <string> tr_app_title: "Free PDF Editor";
+    in property <string> tr_no_document: "No document";
+    in property <string> tr_page_preview: "Page Preview";
+    in property <string> tr_current_prefix: "Current";
+    in property <string> tr_no_document_loaded: "No document loaded";
+    in property <string> tr_page_prefix: "Page";
+    in property <string> tr_license_prefix: "License";
+    in property <string> tr_expires_prefix: "Expires";
+    in property <string> tr_open_recent: "Open Recent";
+    in property <string> tr_no_recent_files: "No recent files";
+    in property <string> tr_click_image_to_edit: "Click image on page to edit";
+    in property <string> tr_width_short: "W";
+    in property <string> tr_height_short: "H";
+    in property <string> tr_lock_aspect: "Lock aspect";
+    in property <string> tr_apply: "Apply";
+    in property <string> tr_text: "Text";
+    in property <string> tr_font: "Font";
+    in property <string> tr_size: "Size";
+    in property <string> tr_insert: "Insert";
+    in property <string> tr_close: "Close";
+    in property <string> tr_zoom: "Zoom";
+
+    in property <string> tr_menu_file: "File";
+    in property <string> tr_menu_edit: "Edit";
+    in property <string> tr_menu_view: "View";
+    in property <string> tr_menu_annotate: "Annotate";
+    in property <string> tr_menu_page: "Page";
+    in property <string> tr_menu_tools: "Tools";
+    in property <string> tr_menu_license: "License";
+
+    in property <string> tr_open: "Open";
+    in property <string> tr_save: "Save";
+    in property <string> tr_save_as: "Save As";
+    in property <string> tr_undo: "Undo";
+    in property <string> tr_redo: "Redo";
+    in property <string> tr_reset_100: "Reset 100%";
+    in property <string> tr_highlight: "Highlight";
+    in property <string> tr_note: "Note";
+    in property <string> tr_previous: "Previous";
+    in property <string> tr_next: "Next";
+    in property <string> tr_delete_page: "Delete Page";
+    in property <string> tr_rotate_page: "Rotate Page";
+    in property <string> tr_insert_text: "Insert Text";
+    in property <string> tr_font_substitute: "Font Substitute";
+    in property <string> tr_insert_image: "Insert Image";
+    in property <string> tr_set_password: "Set Password";
+    in property <string> tr_redact: "Redact";
+    in property <string> tr_apply_ocr: "Apply OCR";
+    in property <string> tr_reorder_pages: "Reorder Pages";
+    in property <string> tr_merge: "Merge";
+    in property <string> tr_create_field: "Create Field";
+    in property <string> tr_set_field_value: "Set Field Value";
+    in property <string> tr_detect_fields: "Detect Fields";
+    in property <string> tr_export_fields: "Export Fields";
+    in property <string> tr_upgrade: "Upgrade";
+    in property <string> tr_activate: "Activate";
+
     callback open-document();
+    callback open-recent(index: int);
     callback save-document();
     callback save-document-as();
     callback close-document();
     callback zoom-in();
     callback zoom-out();
     callback zoom-reset();
+    callback zoom-set(factor: float);
     callback next-page();
     callback prev-page();
     callback undo();
@@ -73,6 +255,17 @@ export component AppWindow inherits Window {
     callback tools-font-substitute();
     callback tools-insert-image();
     callback tools-replace-image();
+    callback tools-edit-image-resource(index: int);
+    callback tools-clear-image-selection();
+    callback image-edit-rotate90();
+    callback image-edit-flip();
+    callback image-edit-delete();
+    callback image-edit-apply-size(width-text: string, height-text: string, keep-aspect: bool);
+    callback text-edit-insert(content-text: string, font-text: string, size-text: string);
+    callback text-edit-close();
+    callback text-edit-font-changed(font-text: string);
+    callback tools-image-resource-prev-page();
+    callback tools-image-resource-next-page();
     callback tools-set-password();
     callback tools-redact-region();
     callback tools-apply-ocr();
@@ -89,6 +282,11 @@ export component AppWindow inherits Window {
     /// available (file-picker integration is pending).
     callback activate-license();
     callback menu-action-selected(menu-index: int, action-index: int);
+    callback canvas-clicked(x: float, y: float);
+    callback canvas-double-clicked(x: float, y: float);
+    callback canvas-press-start(x: float, y: float);
+    callback canvas-press-move(x: float, y: float);
+    callback canvas-press-end(x: float, y: float);
     forward-focus: keyboard_scope;
 
     init => {
@@ -97,6 +295,24 @@ export component AppWindow inherits Window {
 
     changed width => {
         root.compact-mode = root.width < 1160px;
+    }
+
+    changed menu-open => {
+        if (!root.menu-open) {
+            root.tools-image-submenu-open = false;
+            root.file-open-recent-row-hover = false;
+            root.file-open-recent-menu-hover = false;
+        }
+    }
+
+    changed active-menu => {
+        if (root.active-menu != 5) {
+            root.tools-image-submenu-open = false;
+        }
+        if (root.active-menu != 0) {
+            root.file-open-recent-row-hover = false;
+            root.file-open-recent-menu-hover = false;
+        }
     }
 
     keyboard_scope := FocusScope {
@@ -129,7 +345,27 @@ export component AppWindow inherits Window {
                 return accept;
             }
 
+            if (event.modifiers.meta && !event.modifiers.shift && (event.text == "Z" || event.text == "z")) {
+                root.undo();
+                return accept;
+            }
+
             if (event.modifiers.control && !event.modifiers.shift && (event.text == "Y" || event.text == "y")) {
+                root.redo();
+                return accept;
+            }
+
+            if (event.modifiers.meta && !event.modifiers.shift && (event.text == "Y" || event.text == "y")) {
+                root.redo();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "Z" || event.text == "z")) {
+                root.redo();
+                return accept;
+            }
+
+            if (event.modifiers.meta && event.modifiers.shift && (event.text == "Z" || event.text == "z")) {
                 root.redo();
                 return accept;
             }
@@ -140,6 +376,16 @@ export component AppWindow inherits Window {
             }
 
             if (event.modifiers.control && event.text == "-") {
+                root.zoom-out();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.text == Key.UpArrow) {
+                root.zoom-in();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.text == Key.DownArrow) {
                 root.zoom-out();
                 return accept;
             }
@@ -184,7 +430,7 @@ export component AppWindow inherits Window {
                     spacing: 10px;
 
                     Text {
-                        text: "Free PDF Editor";
+                        text: root.tr_app_title;
                         color: root.color-text;
                         font-size: root.compact-mode ? 13px : 15px;
                         font-weight: 700;
@@ -192,7 +438,7 @@ export component AppWindow inherits Window {
                     }
 
                     Text {
-                        text: root.document-title == "" ? "No document" : root.document-title;
+                        text: root.document-title == "" ? root.tr_no_document : root.document-title;
                         color: root.color-muted;
                         font-size: 11px;
                         vertical-alignment: center;
@@ -203,15 +449,32 @@ export component AppWindow inherits Window {
                     spacing: root.menu-row-spacing;
                     alignment: start;
 
-                    for menu_name[idx] in root.menu-model : Button {
+                    for menu_name[idx] in root.menu-model : Rectangle {
                         width: root.menu-button-width;
-                        text: menu_name;
-                        clicked => {
-                            if (root.active-menu == idx) {
-                                root.menu-open = !root.menu-open;
-                            } else {
-                                root.active-menu = idx;
-                                root.menu-open = true;
+                        height: root.compact-mode ? 26px : 28px;
+                        border-radius: 4px;
+                        border-width: root.menu-open && root.active-menu == idx ? 1px : 0px;
+                        border-color: root.color-border;
+                        background: root.menu-open && root.active-menu == idx ? root.color-menu-active : transparent;
+
+                        Text {
+                            text: menu_name;
+                            color: root.menu-open && root.active-menu == idx ? root.color-text : root.color-muted;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            clicked => {
+                                if (root.active-menu == idx) {
+                                    root.menu-open = !root.menu-open;
+                                } else {
+                                    root.active-menu = idx;
+                                    root.menu-open = true;
+                                }
                             }
                         }
                     }
@@ -250,14 +513,14 @@ export component AppWindow inherits Window {
                     spacing: root.compact-mode ? 6px : 10px;
 
                     Text {
-                        text: "Page Preview";
+                        text: root.tr_page_preview;
                         font-size: 13px;
                         font-weight: 600;
                         color: root.color-text;
                     }
 
                     Text {
-                        text: root.page-count > 0 ? "Current: " + root.current-page + " / " + root.page-count : "No document loaded";
+                        text: root.page-count > 0 ? root.tr_current_prefix + ": " + root.current-page + " / " + root.page-count : root.tr_no_document_loaded;
                         font-size: 11px;
                         color: root.color-muted;
                     }
@@ -284,7 +547,7 @@ export component AppWindow inherits Window {
                     min-width: 800px;
                     background: root.color-canvas;
                     border-width: 1px;
-                    border-color: #cdd8f0;
+                    border-color: root.color-border;
 
                     TouchArea {
                         width: parent.width;
@@ -313,18 +576,259 @@ export component AppWindow inherits Window {
 
                             Rectangle {
                                 border-width: 1px;
-                                border-color: #c5d1ec;
+                                border-color: root.color-border;
                                 border-radius: 10px;
-                                background: #ffffff;
+                                background: root.dark-theme ? #0f172a : #ffffff;
                                 VerticalBox {
                                     padding: 12px;
                                     spacing: 0px;
 
-                                    Image {
-                                        source: root.page-image;
-                                        image-fit: contain;
-                                        min-width: 595px;
-                                        min-height: 842px;
+                                    Rectangle {
+                                        width: root.page-width * 1px * root.zoom-level;
+                                        height: root.page-height * 1px * root.zoom-level;
+                                        background: transparent;
+
+                                        Image {
+                                            width: parent.width;
+                                            height: parent.height;
+                                            source: root.page-image;
+                                            image-fit: fill;
+                                        }
+
+                                        TouchArea {
+                                            width: parent.width;
+                                            height: parent.height;
+                                            enabled: root.has-document;
+                                            mouse-cursor: root.image-drag-active ? MouseCursor.grabbing : MouseCursor.default;
+                                            changed pressed => {
+                                                let mx = self.mouse-x / 1px;
+                                                let my = self.mouse-y / 1px;
+                                                if (self.pressed) {
+                                                    root.canvas-press-start(mx, my);
+                                                } else {
+                                                    root.canvas-press-end(mx, my);
+                                                }
+                                            }
+                                            moved => {
+                                                if (self.pressed) {
+                                                    root.canvas-press-move(self.mouse-x / 1px, self.mouse-y / 1px);
+                                                }
+                                            }
+                                            clicked => {
+                                                let mx = self.mouse-x / 1px;
+                                                let my = self.mouse-y / 1px;
+                                                root.canvas-clicked(mx, my);
+                                            }
+                                            double-clicked => {
+                                                let mx = self.mouse-x / 1px;
+                                                let my = self.mouse-y / 1px;
+                                                root.canvas-double-clicked(mx, my);
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            visible: root.image-edit-controls-visible;
+                                            opacity: root.image-edit-controls-visible ? 1 : 0;
+                                            x: root.image-edit-controls-x * 1px;
+                                            y: (root.image-edit-controls-y + (root.image-edit-controls-visible ? 0 : 6)) * 1px;
+                                            width: 540px;
+                                            height: 96px;
+                                            border-width: 1px;
+                                            border-color: root.color-border;
+                                            border-radius: 8px;
+                                            background: root.color-panel;
+                                            animate opacity { duration: 140ms; }
+                                            animate x { duration: 140ms; }
+                                            animate y { duration: 140ms; }
+
+                                            HorizontalBox {
+                                                padding: 6px;
+                                                spacing: 6px;
+
+                                                Rectangle {
+                                                    width: 28px;
+                                                    height: 28px;
+                                                    border-width: 1px;
+                                                    border-color: root.color-border;
+                                                    border-radius: 5px;
+                                                    background: root.color-panel-soft;
+                                                    Path {
+                                                        x: 5px;
+                                                        y: 5px;
+                                                        width: 18px;
+                                                        height: 18px;
+                                                        commands: "M 9 2 A 7 7 0 1 1 2.3 11 M 9 2 L 12 2 M 12 2 L 12 5";
+                                                        stroke: root.color-text;
+                                                        stroke-width: 1.5px;
+                                                        fill: transparent;
+                                                    }
+                                                    TouchArea {
+                                                        width: parent.width;
+                                                        height: parent.height;
+                                                        clicked => { root.image-edit-rotate90(); }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    width: 28px;
+                                                    height: 28px;
+                                                    border-width: 1px;
+                                                    border-color: root.color-border;
+                                                    border-radius: 5px;
+                                                    background: root.color-panel-soft;
+                                                    Path {
+                                                        x: 4px;
+                                                        y: 8px;
+                                                        width: 20px;
+                                                        height: 12px;
+                                                        commands: "M 2 6 L 18 6 M 2 6 L 6 2 M 2 6 L 6 10 M 18 6 L 14 2 M 18 6 L 14 10";
+                                                        stroke: root.color-text;
+                                                        stroke-width: 1.5px;
+                                                        fill: transparent;
+                                                    }
+                                                    TouchArea {
+                                                        width: parent.width;
+                                                        height: parent.height;
+                                                        clicked => { root.image-edit-flip(); }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    width: 28px;
+                                                    height: 28px;
+                                                    border-width: 1px;
+                                                    border-color: root.color-border;
+                                                    border-radius: 5px;
+                                                    background: root.color-panel-soft;
+                                                    Path {
+                                                        x: 6px;
+                                                        y: 5px;
+                                                        width: 16px;
+                                                        height: 18px;
+                                                        commands: "M 1 4 L 15 4 M 4 4 L 5 16 L 11 16 L 12 4 M 6 4 L 6 2 L 10 2 L 10 4 M 7 7 L 7 13 M 9 7 L 9 13";
+                                                        stroke: root.color-text;
+                                                        stroke-width: 1.2px;
+                                                        fill: transparent;
+                                                    }
+                                                    TouchArea {
+                                                        width: parent.width;
+                                                        height: parent.height;
+                                                        clicked => { root.image-edit-delete(); }
+                                                    }
+                                                }
+
+                                                VerticalBox {
+                                                    spacing: 4px;
+
+                                                    HorizontalBox {
+                                                        spacing: 4px;
+                                                        Text { text: root.tr_width_short; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                        LineEdit {
+                                                            width: 74px;
+                                                            text: root.image-edit-width-text;
+                                                            edited => { root.image-edit-width-text = self.text; }
+                                                        }
+                                                        Text { text: root.tr_height_short; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                        LineEdit {
+                                                            width: 74px;
+                                                            text: root.image-edit-height-text;
+                                                            edited => { root.image-edit-height-text = self.text; }
+                                                        }
+                                                        CheckBox {
+                                                            text: root.tr_lock_aspect;
+                                                            checked: root.image-edit-keep-aspect;
+                                                            toggled => { root.image-edit-keep-aspect = self.checked; }
+                                                        }
+                                                        Button {
+                                                            width: 72px;
+                                                            text: root.tr_apply;
+                                                            clicked => {
+                                                                root.image-edit-apply-size(
+                                                                    root.image-edit-width-text,
+                                                                    root.image-edit-height-text,
+                                                                    root.image-edit-keep-aspect
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            visible: root.text-edit-controls-visible;
+                                            opacity: root.text-edit-controls-visible ? 1 : 0;
+                                            x: root.text-edit-controls-x * 1px;
+                                            y: (root.text-edit-controls-y + (root.text-edit-controls-visible ? 0 : 6)) * 1px;
+                                            width: 480px;
+                                            height: 96px;
+                                            border-width: 1px;
+                                            border-color: root.color-border;
+                                            border-radius: 8px;
+                                            background: root.color-panel;
+                                            animate opacity { duration: 140ms; }
+                                            animate x { duration: 140ms; }
+                                            animate y { duration: 140ms; }
+
+                                            VerticalBox {
+                                                padding: 6px;
+                                                spacing: 4px;
+
+                                                HorizontalBox {
+                                                    spacing: 6px;
+                                                    Text { text: root.tr_text; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                    LineEdit {
+                                                        horizontal-stretch: 1;
+                                                        text: root.text-edit-content-text;
+                                                        edited => { root.text-edit-content-text = self.text; }
+                                                    }
+                                                }
+
+                                                HorizontalBox {
+                                                    spacing: 6px;
+                                                    Text { text: root.tr_font; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                    ComboBox {
+                                                        width: 190px;
+                                                        model: root.text-font-model;
+                                                        current-value: root.text-edit-font-text;
+                                                        selected(value) => {
+                                                            root.text-edit-font-text = value;
+                                                        }
+                                                    }
+                                                    LineEdit {
+                                                        width: 120px;
+                                                        text: root.text-edit-font-text;
+                                                        edited => {
+                                                            root.text-edit-font-text = self.text;
+                                                            root.text-edit-font-changed(self.text);
+                                                        }
+                                                    }
+                                                    Text { text: root.tr_size; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                    LineEdit {
+                                                        width: 64px;
+                                                        text: root.text-edit-size-text;
+                                                        edited => { root.text-edit-size-text = self.text; }
+                                                    }
+                                                    Button {
+                                                        width: 80px;
+                                                        text: root.tr_insert;
+                                                        clicked => {
+                                                            root.text-edit-insert(
+                                                                root.text-edit-content-text,
+                                                                root.text-edit-font-text,
+                                                                root.text-edit-size-text
+                                                            );
+                                                        }
+                                                    }
+                                                    Button {
+                                                        width: 64px;
+                                                        text: root.tr_close;
+                                                        clicked => { root.text-edit-close(); }
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                     }
                                 }
                             }
@@ -358,14 +862,14 @@ export component AppWindow inherits Window {
                 alignment: start;
 
                 Text {
-                    text: root.document-title == "" ? "No document" : root.document-title;
+                    text: root.document-title == "" ? root.tr_no_document : root.document-title;
                     font-size: 11px;
                     color: root.color-text;
                 }
 
                 Text {
                     text: root.page-count > 0
-                        ? "Page " + root.current-page + " / " + root.page-count
+                        ? root.tr_page_prefix + " " + root.current-page + " / " + root.page-count
                         : "";
                     font-size: 11px;
                     color: root.color-muted;
@@ -396,13 +900,13 @@ export component AppWindow inherits Window {
                 alignment: start;
 
                 Text {
-                    text: "License: " + root.license-type;
+                    text: root.tr_license_prefix + ": " + root.license-type;
                     font-size: 11px;
                     color: root.color-text;
                 }
 
                 Text {
-                    text: root.license-expiry != "" ? "Expires: " + root.license-expiry : "";
+                    text: root.license-expiry != "" ? root.tr_expires_prefix + ": " + root.license-expiry : "";
                     font-size: 11px;
                     color: root.color-muted;
                 }
@@ -431,10 +935,10 @@ export component AppWindow inherits Window {
             Rectangle {
                 x: (root.compact-mode ? 8px : 10px) + root.active-menu * (root.menu-button-width + root.menu-row-spacing);
                 y: root.header-height;
-                width: root.compact-mode ? 200px : 230px;
-                height: root.active-menu == 5
+                width: root.active-menu == 5
                     ? (root.compact-mode ? 372px : 420px)
                     : (root.compact-mode ? 128px : 150px);
+                height: root.menu-dropdown-height;
                 background: root.color-panel;
                 border-width: 1px;
                 border-color: root.color-border;
@@ -442,7 +946,6 @@ export component AppWindow inherits Window {
 
                 ScrollView {
                     width: parent.width;
-                    height: parent.height;
 
                     VerticalBox {
                         alignment: start;
@@ -459,67 +962,148 @@ export component AppWindow inherits Window {
 
                         if root.active-menu == 0 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            Button { text: "[O] Open"; clicked => { root.open-document(); root.menu-open = false; } }
-                            Button { text: "[S] Save"; enabled: root.has-document; clicked => { root.save-document(); root.menu-open = false; } }
-                            Button { text: "[SA] Save As"; enabled: root.has-document; clicked => { root.save-document-as(); root.menu-open = false; } }
-                            Button { text: "[X] Close"; enabled: root.has-document; clicked => { root.close-document(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_open; shortcut: "Ctrl+O"; activated => { root.open-document(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_save; shortcut: "Ctrl+S"; enabled: root.has-document; activated => { root.save-document(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_save_as; shortcut: "Ctrl+Shift+S"; enabled: root.has-document; activated => { root.save-document-as(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_close; shortcut: "Esc"; enabled: root.has-document; activated => { root.close-document(); root.menu-open = false; } }
+                            Rectangle { height: 1px; background: root.color-border; }
+                            Rectangle {
+                                height: 24px;
+                                border-radius: 3px;
+                                background: open_recent_hover.has-hover ? root.color-menu-hover : transparent;
+
+                                HorizontalBox {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    Text {
+                                        text: root.tr_open_recent;
+                                        color: root.color-text;
+                                        font-size: 12px;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: "▶";
+                                        color: root.color-muted;
+                                        font-size: 11px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                open_recent_hover := TouchArea {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    changed has-hover => {
+                                        root.file-open-recent-row-hover = self.has-hover;
+                                    }
+                                }
+                            }
                         }
 
                         if root.active-menu == 1 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            Button { text: "[U] Undo"; enabled: root.has-document && root.can-undo; clicked => { root.undo(); root.menu-open = false; } }
-                            Button { text: "[R] Redo"; enabled: root.has-document && root.can-redo; clicked => { root.redo(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_undo; shortcut: "Ctrl+Z"; enabled: root.has-document && root.can-undo; activated => { root.undo(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_redo; shortcut: "Ctrl+Y"; enabled: root.has-document && root.can-redo; activated => { root.redo(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 2 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            Button { text: "[-] Zoom -"; enabled: root.has-document; clicked => { root.zoom-out(); root.menu-open = false; } }
-                            Button { text: "[+] Zoom +"; enabled: root.has-document; clicked => { root.zoom-in(); root.menu-open = false; } }
-                            Button { text: "[1] 100%"; enabled: root.has-document; clicked => { root.zoom-reset(); root.menu-open = false; } }
+                            Text {
+                                text: root.tr_zoom + " " + (root.zoom-level * 100%) + "%";
+                                color: root.color-text;
+                                font-size: 11px;
+                            }
+                            Slider {
+                                enabled: root.has-document;
+                                minimum: 0.25;
+                                maximum: 4.0;
+                                value: root.zoom-level;
+                                changed value => {
+                                    root.zoom-set(self.value);
+                                }
+                            }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_reset_100; shortcut: "Ctrl+0"; enabled: root.has-document; activated => { root.zoom-reset(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 3 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            Button { text: "[H] Highlight"; enabled: root.has-document; clicked => { root.add-highlight(); root.menu-open = false; } }
-                            Button { text: "[N] Note"; enabled: root.has-document; clicked => { root.add-note(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_highlight; shortcut: "H"; enabled: root.has-document; activated => { root.add-highlight(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_note; shortcut: "N"; enabled: root.has-document; activated => { root.add-note(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 4 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            Button { text: "[<] Prev"; enabled: root.has-document && root.current-page > 1; clicked => { root.prev-page(); root.menu-open = false; } }
-                            Button { text: "[>] Next"; enabled: root.has-document && root.current-page < root.page-count; clicked => { root.next-page(); root.menu-open = false; } }
-                            Button { text: "[D] Del Page"; enabled: root.has-document; clicked => { root.delete-current-page(); root.menu-open = false; } }
-                            Button { text: "[R] Rotate"; enabled: root.has-document; clicked => { root.rotate-current-page(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_previous; shortcut: "PgUp"; enabled: root.has-document && root.current-page > 1; activated => { root.prev-page(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_next; shortcut: "PgDn"; enabled: root.has-document && root.current-page < root.page-count; activated => { root.next-page(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_delete_page; shortcut: "Del"; enabled: root.has-document; activated => { root.delete-current-page(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_rotate_page; shortcut: "R"; enabled: root.has-document; activated => { root.rotate-current-page(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 5 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            Button { text: "[T+] Insert Text"; enabled: root.has-document; clicked => { root.tools-insert-text(); root.menu-open = false; } }
-                            Button { text: "[T~] Modify Text"; enabled: root.has-document; clicked => { root.tools-modify-text(); root.menu-open = false; } }
-                            Button { text: "[F] Font Sub"; enabled: root.has-document; clicked => { root.tools-font-substitute(); root.menu-open = false; } }
-                            Button { text: "[I+] Insert Image"; enabled: root.has-document; clicked => { root.tools-insert-image(); root.menu-open = false; } }
-                            Button { text: "[I~] Replace Image"; enabled: root.has-document; clicked => { root.tools-replace-image(); root.menu-open = false; } }
-                            Button { text: "[P] Set Password"; enabled: root.has-document; clicked => { root.tools-set-password(); root.menu-open = false; } }
-                            Button { text: "[R] Redact"; enabled: root.has-document; clicked => { root.tools-redact-region(); root.menu-open = false; } }
-                            Button { text: "[OCR] Apply OCR"; enabled: root.has-document; clicked => { root.tools-apply-ocr(); root.menu-open = false; } }
-                            Button { text: "[PG] Reorder"; enabled: root.has-document; clicked => { root.tools-reorder-pages(); root.menu-open = false; } }
-                            Button { text: "[M] Merge"; enabled: root.has-document; clicked => { root.tools-merge-document(); root.menu-open = false; } }
-                            Button { text: "[C] Create Field"; enabled: root.has-document; clicked => { root.tools-create-field(); root.menu-open = false; } }
-                            Button { text: "[S] Set Field"; enabled: root.has-document; clicked => { root.tools-set-field-value(); root.menu-open = false; } }
-                            Button { text: "[D] Detect Fields"; enabled: root.has-document; clicked => { root.tools-detect-fields(); root.menu-open = false; } }
-                            Button { text: "[E] Export Fields"; enabled: root.has-document; clicked => { root.tools-export-form-data(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_insert_text; shortcut: "T"; enabled: root.has-document; activated => { root.tools-insert-text(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_font_substitute; shortcut: "F"; enabled: root.has-document; activated => { root.tools-font-substitute(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_insert_image; shortcut: "I"; enabled: root.has-document; activated => { root.tools-insert-image(); root.menu-open = false; } }
+                            Text { text: root.tr_click_image_to_edit; color: root.color-muted; font-size: 11px; }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_set_password; shortcut: "P"; enabled: root.has-document; activated => { root.tools-set-password(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_redact; shortcut: "R"; enabled: root.has-document; activated => { root.tools-redact-region(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_apply_ocr; shortcut: "OCR"; enabled: root.has-document; activated => { root.tools-apply-ocr(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_reorder_pages; shortcut: "PG"; enabled: root.has-document; activated => { root.tools-reorder-pages(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_merge; shortcut: "M"; enabled: root.has-document; activated => { root.tools-merge-document(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_create_field; shortcut: "C"; enabled: root.has-document; activated => { root.tools-create-field(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_set_field_value; shortcut: "S"; enabled: root.has-document; activated => { root.tools-set-field-value(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_detect_fields; shortcut: "D"; enabled: root.has-document; activated => { root.tools-detect-fields(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_export_fields; shortcut: "E"; enabled: root.has-document; activated => { root.tools-export-form-data(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 6 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            Button { text: "[$] Upgrade"; enabled: root.license-type == "Personal" || root.license-type == "Trial"; clicked => { root.upgrade-license(); root.menu-open = false; } }
-                            Button { text: "[A] Activate"; clicked => { root.activate-license(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_upgrade; shortcut: "$"; enabled: root.license-type == "Personal" || root.license-type == "Trial"; activated => { root.upgrade-license(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_activate; shortcut: "A"; activated => { root.activate-license(); root.menu-open = false; } }
                         }
                     }
                 }
             }
+
+            if root.active-menu == 0 && root.file-open-recent-visible : Rectangle {
+                x: (root.compact-mode ? 8px : 10px)
+                    + (root.compact-mode ? 128px : 150px)
+                    + 2px;
+                y: root.header-height + (root.compact-mode ? 136px : 150px);
+                width: root.compact-mode ? 250px : 300px;
+                background: root.color-panel;
+                border-width: 1px;
+                border-color: root.color-border;
+                border-radius: 4px;
+
+                VerticalBox {
+                    padding: 6px;
+                    spacing: 4px;
+
+                    if root.recent-count == 0 : Text {
+                        text: root.tr_no_recent_files;
+                        color: root.color-muted;
+                        font-size: 11px;
+                    }
+                    if root.recent-count > 0 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-a; shortcut: "Alt+1"; activated => { root.open-recent(0); root.menu-open = false; } }
+                    if root.recent-count > 1 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-b; shortcut: "Alt+2"; activated => { root.open-recent(1); root.menu-open = false; } }
+                    if root.recent-count > 2 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-c; shortcut: "Alt+3"; activated => { root.open-recent(2); root.menu-open = false; } }
+                    if root.recent-count > 3 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-d; shortcut: "Alt+4"; activated => { root.open-recent(3); root.menu-open = false; } }
+                    if root.recent-count > 4 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-e; shortcut: "Alt+5"; activated => { root.open-recent(4); root.menu-open = false; } }
+                }
+
+                recent_hover_area := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    changed has-hover => {
+                        root.file-open-recent-menu-hover = self.has-hover;
+                    }
+                }
+            }
         }
+
     }
 }
+
 
 

@@ -3,7 +3,17 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    slint_build::compile("ui/app.slint").unwrap();
+    // Slint code generation can require a deeper stack on Windows for larger UI trees.
+    // Run it on a dedicated thread with an explicit stack size to avoid STATUS_STACK_OVERFLOW.
+    std::thread::Builder::new()
+        .name("slint-build".into())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(|| {
+            slint_build::compile("ui/app.slint").expect("slint build failed");
+        })
+        .expect("failed to spawn slint build thread")
+        .join()
+        .expect("slint build thread panicked");
 
     // ── Version injection from release/release.json ───────────────────────────
     // CI sets APP_VERSION, APP_CHANNEL, APP_BUILD_NUMBER as environment

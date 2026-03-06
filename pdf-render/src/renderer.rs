@@ -80,7 +80,7 @@ impl MuPdfRenderer {
         let matrix = mupdf::Matrix::new_scale(zoom, zoom);
         let cs = mupdf::Colorspace::device_rgb();
         let pixmap = page
-            .to_pixmap(&matrix, &cs, false, false)
+            .to_pixmap(&matrix, &cs, false, true)
             .map_err(|e| RenderError::Backend(e.to_string()))?;
 
         let width = pixmap.width();
@@ -101,6 +101,61 @@ impl MuPdfRenderer {
         }
 
         tracing::debug!(page_index, width, height, zoom, "page rasterized (mupdf)");
+        Ok(RenderedPage {
+            data,
+            width,
+            height,
+            page_index,
+        })
+    }
+
+    /// Render a single page directly from in-memory PDF bytes.
+    pub fn render_from_bytes(
+        bytes: &[u8],
+        page_index: u32,
+        zoom: f32,
+    ) -> Result<RenderedPage, RenderError> {
+        if zoom <= 0.0 || zoom > 10.0 {
+            return Err(RenderError::InvalidZoom(zoom));
+        }
+
+        let mdoc = mupdf::Document::from_bytes(bytes, "pdf")
+            .map_err(|e| RenderError::Backend(format!("mupdf open bytes: {e}")))?;
+
+        let page_count = mdoc
+            .page_count()
+            .map_err(|e| RenderError::Backend(e.to_string()))? as u32;
+        if page_index >= page_count {
+            return Err(RenderError::PageOutOfRange(page_index));
+        }
+
+        let page = mdoc
+            .load_page(page_index as i32)
+            .map_err(|e| RenderError::Backend(e.to_string()))?;
+
+        let matrix = mupdf::Matrix::new_scale(zoom, zoom);
+        let cs = mupdf::Colorspace::device_rgb();
+        let pixmap = page
+            .to_pixmap(&matrix, &cs, false, true)
+            .map_err(|e| RenderError::Backend(e.to_string()))?;
+
+        let width = pixmap.width();
+        let height = pixmap.height();
+        let stride = pixmap.stride() as usize;
+        let samples = pixmap.samples();
+
+        let mut data = Vec::with_capacity((width * height * 4) as usize);
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                let off = y * stride + x * 3;
+                data.push(samples[off]);
+                data.push(samples[off + 1]);
+                data.push(samples[off + 2]);
+                data.push(255);
+            }
+        }
+
+        tracing::debug!(page_index, width, height, zoom, "page rasterized (mupdf bytes)");
         Ok(RenderedPage {
             data,
             width,

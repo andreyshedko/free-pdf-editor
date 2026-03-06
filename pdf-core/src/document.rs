@@ -170,6 +170,18 @@ impl Document {
         Ok(())
     }
 
+    /// Serialize the current in-memory document state into a PDF byte buffer.
+    ///
+    /// This includes unsaved edits and is useful for preview/render pipelines
+    /// that must reflect changes immediately without forcing a disk save.
+    pub fn to_bytes(&mut self) -> Result<Vec<u8>, PdfCoreError> {
+        let mut out = Vec::new();
+        self.inner
+            .save_to(&mut out)
+            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        Ok(out)
+    }
+
     /// Save the document as an incremental update appended to the original file
     /// bytes.  When the document was opened from disk the original raw bytes are
     /// retained; the new revision is appended, making the resulting PDF smaller

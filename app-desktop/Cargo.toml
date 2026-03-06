@@ -18,6 +18,11 @@ slint        = "1.9"
 tracing      = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rfd          = "0.15"
+tinyfiledialogs = "3.9"
+lopdf = "0.39"
+image = "0.25"
+dark-light = "1.1"
+sys-locale = "0.3"
 
 [build-dependencies]
 slint-build = "1.9"

@@ -3,6 +3,7 @@ use lopdf::{
     dictionary, Object, Stream,
 };
 use pdf_core::{Document, DocumentCommand, PdfCoreError};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 // ---------------------------------------------------------------------------
 // Shared helpers used by text commands
@@ -20,6 +21,117 @@ fn collect_content_ids(inner: &lopdf::Document, page_id: lopdf::ObjectId) -> Vec
         Some(Object::Array(arr)) => arr.iter().filter_map(|o| o.as_reference().ok()).collect(),
         _ => vec![],
     }
+}
+
+fn operand_to_f32(obj: &Object) -> Option<f32> {
+    match obj {
+        Object::Integer(v) => Some(*v as f32),
+        Object::Real(v) => Some(*v),
+        _ => None,
+    }
+}
+
+fn matrix_from_operands(operands: &[Object]) -> Option<[f32; 6]> {
+    if operands.len() < 6 {
+        return None;
+    }
+    Some([
+        operand_to_f32(&operands[0])?,
+        operand_to_f32(&operands[1])?,
+        operand_to_f32(&operands[2])?,
+        operand_to_f32(&operands[3])?,
+        operand_to_f32(&operands[4])?,
+        operand_to_f32(&operands[5])?,
+    ])
+}
+
+fn concat_matrix(m1: [f32; 6], m2: [f32; 6]) -> [f32; 6] {
+    [
+        m1[0] * m2[0] + m1[2] * m2[1],
+        m1[1] * m2[0] + m1[3] * m2[1],
+        m1[0] * m2[2] + m1[2] * m2[3],
+        m1[1] * m2[2] + m1[3] * m2[3],
+        m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+        m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+    ]
+}
+
+fn invert_matrix(m: [f32; 6]) -> Option<[f32; 6]> {
+    let (a, b, c, d, e, f) = (m[0], m[1], m[2], m[3], m[4], m[5]);
+    let det = a * d - b * c;
+    if det.abs() < 1e-6 {
+        return None;
+    }
+    let inv_det = 1.0 / det;
+    let ia = d * inv_det;
+    let ib = -b * inv_det;
+    let ic = -c * inv_det;
+    let id = a * inv_det;
+    let ie = -(ia * e + ic * f);
+    let if_ = -(ib * e + id * f);
+    Some([ia, ib, ic, id, ie, if_])
+}
+
+fn matrix_is_finite(m: [f32; 6]) -> bool {
+    m.iter().all(|v| v.is_finite())
+}
+
+fn matrix_is_reasonable_scale(m: [f32; 6]) -> bool {
+    // Defensive bound: avoid applying extreme corrective transforms that can
+    // push text off-canvas or become numerically unstable in viewers.
+    m.iter().all(|v| v.abs() <= 10000.0)
+}
+
+fn matrix_approx_identity(m: [f32; 6], eps: f32) -> bool {
+    (m[0] - 1.0).abs() <= eps
+        && m[1].abs() <= eps
+        && m[2].abs() <= eps
+        && (m[3] - 1.0).abs() <= eps
+        && m[4].abs() <= eps
+        && m[5].abs() <= eps
+}
+
+fn page_trailing_ctm(inner: &lopdf::Document, page_id: lopdf::ObjectId) -> [f32; 6] {
+    let stream_ids = collect_content_ids(inner, page_id);
+    if stream_ids.is_empty() {
+        return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+    }
+
+    let mut ctm = [1.0f32, 0.0, 0.0, 1.0, 0.0, 0.0];
+    let mut stack: Vec<[f32; 6]> = Vec::new();
+    for stream_id in stream_ids {
+        let Ok(stream_obj) = inner.get_object(stream_id) else {
+            continue;
+        };
+        let Ok(stream) = stream_obj.as_stream() else {
+            continue;
+        };
+        let bytes = stream
+            .decompressed_content()
+            .unwrap_or_else(|_| stream.content.clone());
+        let Ok(content) = Content::decode(&bytes) else {
+            continue;
+        };
+
+        for op in &content.operations {
+            match op.operator.as_str() {
+                "q" => stack.push(ctm),
+                "Q" => {
+                    if let Some(prev) = stack.pop() {
+                        ctm = prev;
+                    }
+                }
+                "cm" => {
+                    if let Some(m) = matrix_from_operands(&op.operands) {
+                        ctm = concat_matrix(ctm, m);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    ctm
 }
 
 /// In-place replacement of the matching literal string inside a `Tj` or `TJ`
@@ -68,17 +180,30 @@ pub struct InsertTextCommand {
     x: f32,
     y: f32,
     font_size: f32,
+    preferred_font_name: Option<String>,
     snapshot: Option<Vec<u8>>,
 }
 
 impl InsertTextCommand {
     pub fn new(page_index: u32, text: impl Into<String>, x: f32, y: f32, font_size: f32) -> Self {
+        Self::new_with_font(page_index, text, x, y, font_size, Option::<String>::None)
+    }
+
+    pub fn new_with_font(
+        page_index: u32,
+        text: impl Into<String>,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        preferred_font_name: Option<String>,
+    ) -> Self {
         Self {
             page_index,
             text: text.into(),
             x,
             y,
             font_size,
+            preferred_font_name,
             snapshot: None,
         }
     }
@@ -98,19 +223,206 @@ impl DocumentCommand for InsertTextCommand {
 
         let page = doc.get_page(self.page_index)?;
         let page_id = page.object_id;
+        let trailing_ctm = page_trailing_ctm(doc.inner(), page_id);
+        let neutralize_ctm = invert_matrix(trailing_ctm)
+            .filter(|m| matrix_is_finite(*m) && matrix_is_reasonable_scale(*m))
+            .filter(|m| {
+                let composed = concat_matrix(trailing_ctm, *m);
+                matrix_approx_identity(composed, 0.05)
+            })
+            .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+
+        static FONT_COUNTER: AtomicU32 = AtomicU32::new(1);
+        let fallback_font_name = format!("FAuto{}", FONT_COUNTER.fetch_add(1, Ordering::Relaxed));
+        let mut font_name_bytes = fallback_font_name.as_bytes().to_vec();
+
+        // Resolve inherited /Resources and write an explicit page-level font mapping
+        // so the inserted text stream can always resolve its /Tf font name.
+        let mut resources_dict: lopdf::Dictionary = {
+            let inner = doc.inner();
+            let mut current_id = page_id;
+            let mut resolved = lopdf::Dictionary::new();
+
+            loop {
+                let dict_opt = inner
+                    .get_object(current_id)
+                    .ok()
+                    .and_then(|o| o.as_dict().ok());
+                let Some(node_dict) = dict_opt else {
+                    break;
+                };
+
+                if let Ok(res_obj) = node_dict.get(b"Resources") {
+                    if let Ok(res_id) = res_obj.as_reference() {
+                        if let Ok(resolved_dict) = inner
+                            .get_object(res_id)
+                            .and_then(|o| o.as_dict())
+                            .map(|d| d.clone())
+                        {
+                            resolved = resolved_dict;
+                            break;
+                        }
+                    } else if let Ok(inline_dict) = res_obj.as_dict() {
+                        resolved = inline_dict.clone();
+                        break;
+                    }
+                }
+
+                let Some(parent_id) = node_dict
+                    .get(b"Parent")
+                    .ok()
+                    .and_then(|o| o.as_reference().ok())
+                else {
+                    break;
+                };
+                current_id = parent_id;
+            }
+
+            resolved
+        };
+
+        let mut font_dict = resources_dict
+            .get(b"Font")
+            .ok()
+            .and_then(|obj| {
+                if let Ok(id) = obj.as_reference() {
+                    doc.inner()
+                        .get_object(id)
+                        .ok()
+                        .and_then(|o| o.as_dict().ok())
+                        .cloned()
+                } else {
+                    obj.as_dict().ok().cloned()
+                }
+            })
+            .unwrap_or_else(lopdf::Dictionary::new);
+
+        // Reuse only known-safe existing fonts.
+        // For non-ASCII text, prefer Type0 fonts if the page already has one.
+        // For ASCII text, prefer standard Type1 faces (Helvetica/Times/Courier).
+        let prefers_type0 = !self.text.is_ascii();
+        let mut chosen_existing_name: Option<Vec<u8>> = None;
+        for (name, obj) in font_dict.iter() {
+            let font_obj = if let Ok(id) = obj.as_reference() {
+                doc.inner().get_object(id).ok()
+            } else {
+                Some(obj)
+            };
+            let font_dict_ref = font_obj.and_then(|o| o.as_dict().ok());
+            let subtype = font_dict_ref
+                .and_then(|d| d.get(b"Subtype").ok())
+                .and_then(|s| s.as_name().ok());
+            let base_font = font_dict_ref
+                .and_then(|d| d.get(b"BaseFont").ok())
+                .and_then(|s| s.as_name().ok());
+            let encoding = font_dict_ref
+                .and_then(|d| d.get(b"Encoding").ok())
+                .and_then(|e| e.as_name().ok());
+
+            if prefers_type0 {
+                // Avoid vertical-writing CMaps (e.g. Identity-V), which can make
+                // inserted text appear rotated/opposite direction.
+                let is_vertical_type0 = subtype == Some(b"Type0")
+                    && encoding
+                        .map(|enc| enc.ends_with(b"-V"))
+                        .unwrap_or(false);
+                if subtype == Some(b"Type0") && !is_vertical_type0 {
+                    chosen_existing_name = Some(name.to_vec());
+                    break;
+                }
+            } else {
+                let is_standard_type1 = subtype == Some(b"Type1")
+                    && matches!(
+                        base_font,
+                        Some(b"Helvetica")
+                            | Some(b"Times-Roman")
+                            | Some(b"Courier")
+                            | Some(b"Times-Bold")
+                            | Some(b"Helvetica-Bold")
+                            | Some(b"Courier-Bold")
+                    );
+                if is_standard_type1 {
+                    chosen_existing_name = Some(name.to_vec());
+                    break;
+                }
+            }
+        }
+
+        let preferred_font = self
+            .preferred_font_name
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+
+        if let Some(name) = preferred_font {
+            let preferred_bytes = name.as_bytes().to_vec();
+            if font_dict.get(&preferred_bytes).is_ok() {
+                font_name_bytes = preferred_bytes;
+            } else if STANDARD_PDF_FONTS.contains(&name) {
+                let font_obj_id = doc.inner_mut().add_object(dictionary! {
+                    "Type" => Object::Name(b"Font".to_vec()),
+                    "Subtype" => Object::Name(b"Type1".to_vec()),
+                    "BaseFont" => Object::Name(preferred_bytes.clone()),
+                    "Encoding" => Object::Name(b"WinAnsiEncoding".to_vec()),
+                });
+                font_dict.set(preferred_bytes.clone(), Object::Reference(font_obj_id));
+                font_name_bytes = preferred_bytes;
+            }
+        } else if let Some(existing_name) = chosen_existing_name {
+            font_name_bytes = existing_name;
+        } else {
+            let font_obj_id = doc.inner_mut().add_object(dictionary! {
+                "Type" => Object::Name(b"Font".to_vec()),
+                "Subtype" => Object::Name(b"Type1".to_vec()),
+                "BaseFont" => Object::Name(b"Helvetica".to_vec()),
+                "Encoding" => Object::Name(b"WinAnsiEncoding".to_vec()),
+            });
+            font_dict.set(font_name_bytes.clone(), Object::Reference(font_obj_id));
+        }
+        resources_dict.set("Font", Object::Dictionary(font_dict));
+
+        {
+            let inner = doc.inner_mut();
+            let page_dict = inner
+                .get_object_mut(page_id)
+                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?
+                .as_dict_mut()
+                .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+            page_dict.set("Resources", Object::Dictionary(resources_dict));
+        }
 
         let ops = vec![
-            Operation::new("BT", vec![]),
+            // Neutralize inherited graphics state from previous page streams.
+            Operation::new("q", vec![]),
             Operation::new(
-                "Tf",
+                "cm",
                 vec![
-                    Object::Name(b"Helvetica".to_vec()),
-                    Object::Real(self.font_size),
+                    Object::Real(neutralize_ctm[0]),
+                    Object::Real(neutralize_ctm[1]),
+                    Object::Real(neutralize_ctm[2]),
+                    Object::Real(neutralize_ctm[3]),
+                    Object::Real(neutralize_ctm[4]),
+                    Object::Real(neutralize_ctm[5]),
                 ],
             ),
-            Operation::new("Td", vec![Object::Real(self.x), Object::Real(self.y)]),
-            Operation::new("Tj", vec![Object::string_literal(self.text.clone())]),
+            // Force a visible fill color for inserted text regardless of prior page state.
+            Operation::new("rg", vec![Object::Real(0.0), Object::Real(0.0), Object::Real(0.0)]),
+            Operation::new("BT", vec![]),
+            Operation::new("Tf", vec![Object::Name(font_name_bytes), Object::Real(self.font_size)]),
+            Operation::new(
+                "Tm",
+                vec![
+                    Object::Real(1.0),
+                    Object::Real(0.0),
+                    Object::Real(0.0),
+                    Object::Real(1.0),
+                    Object::Real(self.x),
+                    Object::Real(self.y),
+                ],
+            ),
+            Operation::new("Tj", vec![lopdf::text_string(&self.text)]),
             Operation::new("ET", vec![]),
+            Operation::new("Q", vec![]),
         ];
         let content = Content { operations: ops };
         let encoded = content
@@ -280,6 +592,7 @@ impl DocumentCommand for ModifyTextCommand {
 
         let old_bytes = self.old_text.as_bytes().to_vec();
         let new_text = self.new_text.clone();
+        let mut replaced_any = false;
 
         // Collect operations from every content stream and apply replacements.
         let mut all_ops: Vec<Operation> = Vec::new();
@@ -298,13 +611,22 @@ impl DocumentCommand for ModifyTextCommand {
                     let parsed =
                         Content::decode(&b).map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
                     all_ops.extend(parsed.operations.into_iter().map(|mut op| {
-                        replace_text_in_op(&mut op, &old_bytes, &new_text);
+                        if replace_text_in_op(&mut op, &old_bytes, &new_text) {
+                            replaced_any = true;
+                        }
                         op
                     }));
                 }
                 // If there is no stream or we cannot retrieve its bytes, skip it as before.
                 None => continue,
             }
+        }
+
+        if !replaced_any {
+            return Err(PdfCoreError::InvalidArgument(format!(
+                "text '{}' not found on page {}",
+                self.old_text, self.page_index
+            )));
         }
 
         let encoded = Content {
@@ -563,6 +885,7 @@ impl DocumentCommand for FontSubstitutionCommand {
 
         let old_name_bytes = self.old_font_name.as_bytes().to_vec();
         let new_name_bytes = self.new_font_name.as_bytes().to_vec();
+        let mut replaced_any = false;
 
         // Replace font name in every content stream and merge into one.
         let mut all_ops: Vec<Operation> = Vec::new();
@@ -587,6 +910,7 @@ impl DocumentCommand for FontSubstitutionCommand {
                         if let Some(Object::Name(ref name)) = op.operands.first() {
                             if name == &old_name_bytes {
                                 op.operands[0] = Object::Name(new_name_bytes.clone());
+                                replaced_any = true;
                             }
                         }
                     }
@@ -597,6 +921,13 @@ impl DocumentCommand for FontSubstitutionCommand {
                 // and skip it.
                 continue;
             }
+        }
+
+        if !replaced_any {
+            return Err(PdfCoreError::InvalidArgument(format!(
+                "font '{}' not found on page {}",
+                self.old_font_name, self.page_index
+            )));
         }
 
         let encoded = Content {

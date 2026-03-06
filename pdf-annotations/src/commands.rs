@@ -1,5 +1,8 @@
 use crate::{
-    io::{find_annotation_object_id, remove_annotation, write_annotation},
+    io::{
+        find_annotation_object_id, remove_annotation, remove_annotation_by_object_id,
+        write_annotation,
+    },
     types::{Annotation, AnnotationId},
 };
 use lopdf::{Object, ObjectId};
@@ -27,7 +30,11 @@ impl DocumentCommand for AddAnnotationCommand {
     }
 
     fn undo(&mut self, doc: &mut Document) -> Result<(), PdfCoreError> {
-        remove_annotation(doc, self.annotation.page_index, &self.annotation.id)
+        if let Some(obj_id) = self.annotation.object_id {
+            remove_annotation_by_object_id(doc, self.annotation.page_index, obj_id)
+        } else {
+            remove_annotation(doc, self.annotation.page_index, &self.annotation.id)
+        }
     }
 }
 
