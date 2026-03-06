@@ -288,6 +288,11 @@ impl AppController {
             me.activate_license_dialog();
         });
 
+        win.on_menu_action_selected(move |menu_index, action_index| {
+            let me = unsafe { &mut *ptr };
+            me.dispatch_menu_action(menu_index, action_index);
+        });
+
         // Display the initial license state in the UI.
         self.update_license_display();
     }
@@ -831,6 +836,77 @@ impl AppController {
             self.emit(DocumentEvent::StatusChanged {
                 message: format!("Form JSON: {}", preview),
             });
+        }
+    }
+
+    fn dispatch_menu_action(&mut self, menu_index: i32, action_index: i32) {
+        if action_index <= 0 {
+            return;
+        }
+
+        match (menu_index, action_index) {
+            (0, 1) => self.open_document_dialog(),
+            (0, 2) => self.save_document(),
+            (0, 3) => self.save_document_as_dialog(),
+            (0, 4) => self.close_document(),
+
+            (1, 1) => self.undo(),
+            (1, 2) => self.redo(),
+
+            (2, 1) => self.set_zoom(self.zoom * 0.8),
+            (2, 2) => self.set_zoom(self.zoom * 1.25),
+            (2, 3) => self.set_zoom(1.0),
+
+            (3, 1) => self.add_highlight_annotation(),
+            (3, 2) => self.add_note_annotation(),
+
+            (4, 1) => {
+                if self.current_page > 0 {
+                    self.current_page -= 1;
+                    self.render_current_page();
+                    self.emit(DocumentEvent::PageChanged {
+                        index: self.current_page,
+                    });
+                }
+            }
+            (4, 2) => {
+                if let Some(doc) = &self.document {
+                    let count = doc.page_count();
+                    if self.current_page + 1 < count {
+                        self.current_page += 1;
+                        self.render_current_page();
+                        self.emit(DocumentEvent::PageChanged {
+                            index: self.current_page,
+                        });
+                    }
+                }
+            }
+            (4, 3) => self.delete_current_page(),
+            (4, 4) => self.rotate_current_page(),
+
+            (5, 1) => self.tool_insert_text(),
+            (5, 2) => self.tool_modify_text(),
+            (5, 3) => self.tool_font_substitution(),
+            (5, 4) => self.tool_insert_image(),
+            (5, 5) => self.tool_replace_image(),
+            (5, 6) => self.tool_set_password(),
+            (5, 7) => self.tool_redact_region(),
+            (5, 8) => self.tool_apply_ocr(),
+            (5, 9) => self.tool_reorder_pages(),
+            (5, 10) => self.tool_merge_document(),
+            (5, 11) => self.tool_create_field(),
+            (5, 12) => self.tool_set_field_value(),
+            (5, 13) => self.tool_detect_fields(),
+            (5, 14) => self.tool_export_form_data(),
+
+            (6, 1) => self.emit(DocumentEvent::StatusChanged {
+                message: "Visit https://example.com/upgrade to purchase a commercial license.".into(),
+            }),
+            (6, 2) => self.activate_license_dialog(),
+
+            _ => self.emit(DocumentEvent::StatusChanged {
+                message: "Unknown menu action".into(),
+            }),
         }
     }
 
