@@ -4,15 +4,26 @@ use pdf_annotations::{
     AddAnnotationCommand,
 };
 use pdf_core::{
-    command::CommandHistory,
+    command::{CommandHistory, DocumentCommand},
     document::Document,
     event::{DocumentEvent, EventBus},
+    ocr::{OcrResult, TextRegion},
 };
-use pdf_editor::{DeletePageCommand, RotatePageCommand};
+use pdf_editor::{
+    ApplyOcrCommand, DeletePageCommand, FontSubstitutionCommand, InsertImageCommand,
+    InsertTextCommand, MergeDocumentCommand, ModifyTextCommand, RedactRegionCommand,
+    ReorderPagesCommand, ReplaceImageCommand, RotatePageCommand, SetPasswordCommand,
+};
+use pdf_forms::{
+    detect_form_fields, export_form_data, CreateFieldCommand, FormFieldKind, FormFieldValue,
+    SetFieldValueCommand,
+};
 #[cfg(feature = "mupdf")]
 use pdf_render::MuPdfRenderer;
 use pdf_render::{CacheKey, PageCache, RenderedPage, SoftwareRenderer};
+use rfd::FileDialog;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Weak};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
 use std::thread;
@@ -67,6 +78,13 @@ pub struct AppController {
 }
 
 impl AppController {
+    fn pick_save_path(default_name: &str) -> Option<PathBuf> {
+        FileDialog::new()
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(default_name)
+            .save_file()
+    }
+
     pub fn new(window: Weak<AppWindow>, evt_tx: Sender<DocumentEvent>) -> Self {
         let cache = Arc::new(Mutex::new(PageCache::new(CACHE_CAPACITY)));
         let render_tx = spawn_render_worker();
@@ -195,6 +213,76 @@ impl AppController {
             });
         });
 
+        win.on_tools_insert_text(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_insert_text();
+        });
+
+        win.on_tools_modify_text(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_modify_text();
+        });
+
+        win.on_tools_font_substitute(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_font_substitution();
+        });
+
+        win.on_tools_insert_image(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_insert_image();
+        });
+
+        win.on_tools_replace_image(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_replace_image();
+        });
+
+        win.on_tools_set_password(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_set_password();
+        });
+
+        win.on_tools_redact_region(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_redact_region();
+        });
+
+        win.on_tools_apply_ocr(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_apply_ocr();
+        });
+
+        win.on_tools_reorder_pages(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_reorder_pages();
+        });
+
+        win.on_tools_merge_document(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_merge_document();
+        });
+
+        win.on_tools_create_field(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_create_field();
+        });
+
+        win.on_tools_set_field_value(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_set_field_value();
+        });
+
+        win.on_tools_detect_fields(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_detect_fields();
+        });
+
+        win.on_tools_export_form_data(move || {
+            let me = unsafe { &mut *ptr };
+            me.tool_export_form_data();
+        });
+
         win.on_activate_license(move || {
             let me = unsafe { &mut *ptr };
             me.activate_license_dialog();
@@ -205,15 +293,18 @@ impl AppController {
     }
 
     fn open_document_dialog(&mut self) {
-        let path = match std::env::var("OPEN_PDF") {
-            Ok(p) => std::path::PathBuf::from(p),
-            Err(_) => {
-                self.emit(DocumentEvent::StatusChanged {
-                    message: "Set OPEN_PDF env var to open a file".into(),
-                });
-                return;
-            }
+        let path = FileDialog::new()
+            .add_filter("PDF", &["pdf"])
+            .pick_file()
+            .or_else(|| std::env::var("OPEN_PDF").ok().map(std::path::PathBuf::from));
+
+        let Some(path) = path else {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Open canceled (optionally set OPEN_PDF as fallback)".into(),
+            });
+            return;
         };
+
         match Document::open(&path) {
             Ok(doc) => {
                 let title = doc.title.clone();
@@ -227,6 +318,10 @@ impl AppController {
                     .evict_document(self.document.as_ref().unwrap().id);
                 self.render_current_page();
                 self.emit(DocumentEvent::DocumentOpened { title, page_count });
+                #[cfg(not(feature = "mupdf"))]
+                self.emit(DocumentEvent::StatusChanged {
+                    message: "This build uses a placeholder renderer. Rebuild with --features mupdf for full PDF preview.".into(),
+                });
                 self.update_undo_redo_state();
             }
             Err(e) => {
@@ -246,28 +341,56 @@ impl AppController {
             });
         }
         if let Some(doc) = &mut self.document {
-            match doc.save() {
-                Ok(()) => {
-                    let path = doc.path.display().to_string();
-                    self.emit(DocumentEvent::DocumentSaved { path });
+            // If the document has no concrete path yet, ask the user where to save it.
+            if doc.path.as_os_str().is_empty() {
+                let default_name = format!("{}.pdf", doc.title);
+                let Some(path) = Self::pick_save_path(&default_name) else {
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: "Save canceled".into(),
+                    });
+                    return;
+                };
+                match doc.save_to(&path) {
+                    Ok(()) => self.emit(DocumentEvent::DocumentSaved {
+                        path: path.display().to_string(),
+                    }),
+                    Err(e) => self.emit(DocumentEvent::Error {
+                        message: e.to_string(),
+                    }),
                 }
-                Err(e) => self.emit(DocumentEvent::Error {
-                    message: e.to_string(),
-                }),
+            } else {
+                match doc.save() {
+                    Ok(()) => {
+                        let path = doc.path.display().to_string();
+                        self.emit(DocumentEvent::DocumentSaved { path });
+                    }
+                    Err(e) => self.emit(DocumentEvent::Error {
+                        message: e.to_string(),
+                    }),
+                }
             }
         }
     }
 
     fn save_document_as_dialog(&mut self) {
-        let path = match std::env::var("SAVE_PDF") {
-            Ok(p) => std::path::PathBuf::from(p),
-            Err(_) => {
-                self.emit(DocumentEvent::StatusChanged {
-                    message: "Set SAVE_PDF env var to save to a path".into(),
-                });
-                return;
-            }
+        let Some(default_name) = self
+            .document
+            .as_ref()
+            .map(|d| format!("{}.pdf", d.title))
+        else {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "No document is open".into(),
+            });
+            return;
         };
+
+        let Some(path) = Self::pick_save_path(&default_name) else {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Save As canceled".into(),
+            });
+            return;
+        };
+
         // Check license before borrowing document mutably.
         let needs_watermark_notice = !self.license.is_commercial_allowed();
         if needs_watermark_notice {
@@ -457,6 +580,257 @@ impl AppController {
                     message: e.to_string(),
                 }),
             }
+        }
+    }
+
+    fn ensure_document_open(&self) -> bool {
+        if self.document.is_none() {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Open a document first".into(),
+            });
+            return false;
+        }
+        true
+    }
+
+    fn run_tool_command(&mut self, cmd: Box<dyn DocumentCommand>, success_message: &str) {
+        if !self.ensure_document_open() {
+            return;
+        }
+        if let Some(doc) = &mut self.document {
+            match self.history.execute(cmd, doc) {
+                Ok(()) => {
+                    self.render_current_page();
+                    self.update_undo_redo_state();
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: success_message.into(),
+                    });
+                }
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
+            }
+        }
+    }
+
+    fn tool_insert_text(&mut self) {
+        let cmd = Box::new(InsertTextCommand::new(
+            self.current_page,
+            "Tool text",
+            72.0,
+            720.0,
+            14.0,
+        ));
+        self.run_tool_command(cmd, "Inserted sample text");
+    }
+
+    fn tool_modify_text(&mut self) {
+        let cmd = Box::new(ModifyTextCommand::new(self.current_page, "Tool", "Edited"));
+        self.run_tool_command(cmd, "Modified matching text on page");
+    }
+
+    fn tool_font_substitution(&mut self) {
+        let cmd = Box::new(FontSubstitutionCommand::new(
+            self.current_page,
+            "Helvetica",
+            "Times-Roman",
+        ));
+        self.run_tool_command(cmd, "Applied font substitution");
+    }
+
+    fn tool_insert_image(&mut self) {
+        let w = 64u32;
+        let h = 64u32;
+        let mut data = vec![0u8; (w * h * 3) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 3) as usize;
+                let checker = ((x / 8) + (y / 8)) % 2 == 0;
+                data[i] = if checker { 30 } else { 220 };
+                data[i + 1] = if checker { 120 } else { 40 };
+                data[i + 2] = if checker { 230 } else { 40 };
+            }
+        }
+        let cmd = Box::new(InsertImageCommand::new(
+            self.current_page,
+            data,
+            w,
+            h,
+            72.0,
+            500.0,
+            96.0,
+            96.0,
+        ));
+        self.run_tool_command(cmd, "Inserted sample image");
+    }
+
+    fn tool_replace_image(&mut self) {
+        let w = 32u32;
+        let h = 32u32;
+        let mut data = vec![0u8; (w * h * 3) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 3) as usize;
+                data[i] = 240;
+                data[i + 1] = 180;
+                data[i + 2] = 30;
+            }
+        }
+        let cmd = Box::new(ReplaceImageCommand::new(
+            self.current_page,
+            "ImAuto1",
+            data,
+            w,
+            h,
+            Some(96.0),
+            Some(96.0),
+        ));
+        self.run_tool_command(cmd, "Replaced image resource ImAuto1");
+    }
+
+    fn tool_set_password(&mut self) {
+        let cmd = Box::new(SetPasswordCommand::new("password123"));
+        self.run_tool_command(cmd, "Set document password");
+    }
+
+    fn tool_redact_region(&mut self) {
+        let cmd = Box::new(RedactRegionCommand::new(
+            self.current_page,
+            72.0,
+            680.0,
+            240.0,
+            40.0,
+        ));
+        self.run_tool_command(cmd, "Applied redaction region");
+    }
+
+    fn tool_apply_ocr(&mut self) {
+        let result = OcrResult {
+            page_index: self.current_page,
+            regions: vec![TextRegion {
+                text: "OCR sample".into(),
+                x: 72.0,
+                y: 640.0,
+                width: 160.0,
+                height: 20.0,
+                confidence: 0.9,
+            }],
+            full_text: "OCR sample".into(),
+        };
+        let cmd = Box::new(ApplyOcrCommand::new(result));
+        self.run_tool_command(cmd, "Applied OCR text layer");
+    }
+
+    fn tool_reorder_pages(&mut self) {
+        if !self.ensure_document_open() {
+            return;
+        }
+        let Some(doc) = &self.document else {
+            return;
+        };
+        let count = doc.page_count();
+        if count < 2 {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Need at least 2 pages to reorder".into(),
+            });
+            return;
+        }
+        let mut order: Vec<u32> = (0..count).collect();
+        order.reverse();
+        let cmd = Box::new(ReorderPagesCommand::new(order));
+        self.run_tool_command(cmd, "Reordered pages (reversed)");
+    }
+
+    fn tool_merge_document(&mut self) {
+        if !self.ensure_document_open() {
+            return;
+        }
+        let path = FileDialog::new().add_filter("PDF", &["pdf"]).pick_file();
+        let Some(path) = path else {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Merge canceled".into(),
+            });
+            return;
+        };
+        let other = match Document::open(&path) {
+            Ok(doc) => doc,
+            Err(e) => {
+                self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                });
+                return;
+            }
+        };
+        let cmd = Box::new(MergeDocumentCommand::new(other));
+        self.run_tool_command(cmd, "Merged another document");
+    }
+
+    fn tool_create_field(&mut self) {
+        let cmd = Box::new(CreateFieldCommand::new(
+            format!("Field{}", self.current_page + 1),
+            FormFieldKind::TextField,
+            self.current_page,
+            [72.0, 620.0, 260.0, 645.0],
+        ));
+        self.run_tool_command(cmd, "Created text form field");
+    }
+
+    fn tool_set_field_value(&mut self) {
+        if !self.ensure_document_open() {
+            return;
+        }
+        if let Some(doc) = &mut self.document {
+            let fields = detect_form_fields(doc);
+            let Some(field) = fields.first() else {
+                self.emit(DocumentEvent::StatusChanged {
+                    message: "No form fields found".into(),
+                });
+                return;
+            };
+            let new_value = match field.kind {
+                FormFieldKind::Checkbox | FormFieldKind::Radio => FormFieldValue::Boolean(true),
+                FormFieldKind::Dropdown => FormFieldValue::Selected("Option".into()),
+                _ => FormFieldValue::Text("Sample value".into()),
+            };
+            let field_name = field.full_name.clone();
+            let cmd = Box::new(SetFieldValueCommand::new(field_name, new_value));
+            match self.history.execute(cmd, doc) {
+                Ok(()) => {
+                    self.render_current_page();
+                    self.update_undo_redo_state();
+                    self.emit(DocumentEvent::StatusChanged {
+                        message: "Set value for first form field".into(),
+                    });
+                }
+                Err(e) => self.emit(DocumentEvent::Error {
+                    message: e.to_string(),
+                }),
+            }
+        }
+    }
+
+    fn tool_detect_fields(&mut self) {
+        if !self.ensure_document_open() {
+            return;
+        }
+        if let Some(doc) = &self.document {
+            let fields = detect_form_fields(doc);
+            self.emit(DocumentEvent::StatusChanged {
+                message: format!("Detected {} form field(s)", fields.len()),
+            });
+        }
+    }
+
+    fn tool_export_form_data(&mut self) {
+        if !self.ensure_document_open() {
+            return;
+        }
+        if let Some(doc) = &self.document {
+            let json = export_form_data(doc).to_string();
+            let preview: String = json.chars().take(140).collect();
+            self.emit(DocumentEvent::StatusChanged {
+                message: format!("Form JSON: {}", preview),
+            });
         }
     }
 
@@ -693,7 +1067,8 @@ fn apply_rendered_page(
         let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(rendered.width, rendered.height);
         buf.make_mut_bytes().copy_from_slice(&rendered.data);
         let image = Image::from_rgba8(buf);
-        win.set_page_image(image);
+        win.set_page_image(image.clone());
+        win.set_thumbnail_image(image);
         win.set_current_page(page_index as i32 + 1);
         win.set_page_count(page_count as i32);
     }

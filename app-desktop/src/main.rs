@@ -57,6 +57,7 @@ fn apply_event(window: &AppWindow, event: DocumentEvent) {
             window.set_page_count(0);
             window.set_current_page(0);
             window.set_page_image(Default::default());
+            window.set_thumbnail_image(Default::default());
             window.set_status_text("Document closed".into());
         }
         DocumentEvent::DocumentSaved { path } => {

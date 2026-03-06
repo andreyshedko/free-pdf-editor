@@ -71,17 +71,19 @@ Built with **Slint** 1.9 — a single-window UI with:
 
 | Button | Action |
 |--------|--------|
-| Open | Opens a file via `OPEN_PDF` env var (dialog stub) |
-| Save | Saves to `SAVE_PDF` env var path |
-| Save As | Saves to `SAVE_AS_PDF` env var path |
+| Open | Opens a file via a native file picker (`OPEN_PDF` env var fallback) |
+| Save | Saves in-place to the current file path (prompts for path if missing) |
+| Save As | Saves via a native file picker |
 | Close | Closes the current document |
 | Undo / Redo | Undo / redo last command (disabled when unavailable) |
 | Zoom − / Zoom + / 100% | ×0.8 / ×1.25 / reset to 1.0 |
-| Prev / Next | Page navigation |
+| Prev / Next | Page navigation (mouse wheel over the page also navigates) |
 | Highlight | Adds a yellow highlight annotation at a fixed position |
 | Note | Adds a sticky-note annotation at a fixed position |
 | Del Page | Deletes the current page |
 | Rotate | Rotates the current page 90° clockwise |
+
+The main view includes a left thumbnail pane with a scaled preview of the current page.
 
 **Status bar** shows the document title, current page / total pages, and a
 status message (errors, zoom level, save path, etc.).
@@ -160,6 +162,13 @@ To build the full desktop application (requires a display / fontconfig):
 cargo build --bin pdf-editor
 ```
 
+For full PDF raster preview (instead of the software placeholder renderer),
+enable MuPDF:
+
+```bash
+cargo build -p app-desktop --bin pdf-editor --features mupdf
+```
+
 #### Building a release executable
 
 **Linux / macOS**
@@ -177,6 +186,12 @@ cargo build --release --bin pdf-editor
 ```
 
 ### Run
+
+```bash
+cargo run --bin pdf-editor
+```
+
+Optional fallback (useful in headless environments):
 
 ```bash
 OPEN_PDF=/path/to/file.pdf cargo run --bin pdf-editor

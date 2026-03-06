@@ -17,6 +17,7 @@ licensing    = { path = "../services/licensing" }
 slint        = "1.9"
 tracing      = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rfd          = "0.15"
 
 [build-dependencies]
 slint-build = "1.9"
