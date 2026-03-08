@@ -1,5 +1,7 @@
+mod constants;
 mod controller;
 mod i18n;
+mod models;
 
 use controller::AppController;
 use dark_light::Mode;

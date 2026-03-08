@@ -214,6 +214,34 @@ Tests cover (52 tests total):
 - `pdf-annotations` — add/remove annotation execute-and-undo, idempotent undo guard
 - `pdf-forms` — AcroForm field detection, `SetFieldValueCommand` execute-and-undo, `CreateFieldCommand` (all field kinds, multi-field, undo)
 
+### Desktop E2E (Windows)
+
+For UI regression checks on the native desktop app, use Appium + WinAppDriver.
+
+1. Install Appium and Windows driver:
+
+```powershell
+npm i -g appium
+appium driver install windows
+```
+
+2. Start WinAppDriver (Administrator) on `127.0.0.1:4723`.
+
+3. Run the smoke test from repo root:
+
+```powershell
+scripts\run_e2e_windows.ps1
+```
+
+Run regression scenarios:
+
+```powershell
+scripts\run_e2e_windows.ps1 -Suite regression
+```
+
+The script builds `pdf-editor.exe` (debug) and runs `tests/e2e/test/smoke.mjs`.
+See `tests/e2e/README.md` for environment variables and manual run options.
+
 ## License management
 
 The application uses an **ED25519-signed** JSON license file to gate commercial features.

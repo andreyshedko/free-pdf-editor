@@ -34,74 +34,15 @@ use std::sync::{mpsc, mpsc::Sender, Arc, Mutex};
 use std::thread;
 
 use crate::AppWindow;
-
-const CACHE_CAPACITY: usize = 50;
-const HISTORY_DEPTH: usize = 100;
-const MAX_RECENT_DOCUMENTS: usize = 5;
-const MAX_IMAGE_RESOURCE_MENU_ITEMS: usize = 10;
-const IMAGE_EDIT_PANEL_WIDTH: f32 = 540.0;
-const IMAGE_EDIT_PANEL_HEIGHT: f32 = 96.0;
-
-/// A render task submitted to the background render worker.
-struct RenderTask {
-    doc_id: u64,
-    /// Serialized current in-memory document state (includes unsaved edits).
-    doc_bytes: Vec<u8>,
-    #[cfg_attr(not(feature = "mupdf"), allow(dead_code))]
-    doc_path: std::path::PathBuf,
-    page_index: u32,
-    page_width: f64,
-    page_height: f64,
-    zoom: f32,
-    page_count: u32,
-    cache: Arc<Mutex<PageCache>>,
-    window: Weak<AppWindow>,
-    /// Shared generation counter.  The UI thread increments this whenever the
-    /// "desired" render target changes (page nav, zoom, open/close).
-    render_generation: Arc<AtomicU64>,
-    /// The generation value at the time this task was submitted.  If
-    /// `render_generation.load()` no longer equals `expected_generation` when
-    /// the render completes, the result is a stale frame and is discarded.
-    expected_generation: u64,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum PendingAnnotationTool {
-    Highlight,
-    Note,
-}
-
-#[derive(Debug, Clone)]
-struct TextHit {
-    text: String,
-    stream_id: lopdf::ObjectId,
-    op_index: usize,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-#[derive(Debug, Clone)]
-struct ImageHit {
-    resource_name: String,
-    stream_id: lopdf::ObjectId,
-    do_op_index: usize,
-    cm_op_index: usize,
-    matrix: [f32; 6],
-    x_min: f32,
-    x_max: f32,
-    y_min: f32,
-    y_max: f32,
-}
-
-#[derive(Debug)]
-struct UpdateNoteContentCommand {
-    page_index: u32,
-    object_id: (u32, u16),
-    old_content: String,
-    new_content: String,
-}
+use crate::constants::{
+    CACHE_CAPACITY, HISTORY_DEPTH, IMAGE_EDIT_PANEL_HEIGHT, IMAGE_EDIT_PANEL_WIDTH,
+    MAX_IMAGE_RESOURCE_MENU_ITEMS, MAX_RECENT_DISPLAY_CHARS, MAX_RECENT_DOCUMENTS,
+};
+use crate::models::{
+    DeleteImagePlacementCommand, DeleteTextAtOpCommand, ImageHit, InsertedTextAnchor,
+    PendingAnnotationTool, RenderTask, TextHit, UpdateImageTransformCommand,
+    UpdateNoteContentCommand, UpdateTextAtOpCommand,
+};
 
 impl UpdateNoteContentCommand {
     fn new(
@@ -133,24 +74,6 @@ impl DocumentCommand for UpdateNoteContentCommand {
         update_note_content_by_object_id(doc, self.page_index, self.object_id, &self.old_content)
             .map(|_| ())
     }
-}
-
-#[derive(Debug)]
-struct UpdateImageTransformCommand {
-    page_index: u32,
-    stream_id: lopdf::ObjectId,
-    cm_op_index: usize,
-    old_matrix: [f32; 6],
-    new_matrix: [f32; 6],
-    snapshot: Option<Vec<u8>>,
-}
-
-#[derive(Debug)]
-struct DeleteImagePlacementCommand {
-    page_index: u32,
-    stream_id: lopdf::ObjectId,
-    do_op_index: usize,
-    snapshot: Option<Vec<u8>>,
 }
 
 impl DeleteImagePlacementCommand {
@@ -330,16 +253,6 @@ impl DocumentCommand for UpdateImageTransformCommand {
     }
 }
 
-#[derive(Debug)]
-struct UpdateTextAtOpCommand {
-    page_index: u32,
-    stream_id: lopdf::ObjectId,
-    op_index: usize,
-    old_text: String,
-    new_text: String,
-    snapshot: Option<Vec<u8>>,
-}
-
 impl UpdateTextAtOpCommand {
     fn new(
         page_index: u32,
@@ -361,12 +274,12 @@ impl UpdateTextAtOpCommand {
 
 impl DocumentCommand for UpdateTextAtOpCommand {
     fn description(&self) -> &str {
-        "Edit text at selection"
+        "Edit selected text"
     }
 
     fn execute(&mut self, doc: &mut Document) -> Result<(), pdf_core::PdfCoreError> {
-        // Validate page still exists and keep an undo snapshot.
         let _ = doc.get_page(self.page_index)?;
+
         let mut buf = std::io::Cursor::new(Vec::new());
         doc.inner_mut()
             .save_to(&mut buf)
@@ -374,7 +287,6 @@ impl DocumentCommand for UpdateTextAtOpCommand {
         self.snapshot = Some(buf.into_inner());
 
         doc.inner_mut().decompress();
-
         let stream = doc
             .inner_mut()
             .get_object_mut(self.stream_id)
@@ -384,17 +296,16 @@ impl DocumentCommand for UpdateTextAtOpCommand {
 
         let mut content = Content::decode(&stream.content)
             .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?;
-
         if self.op_index >= content.operations.len() {
             return Err(pdf_core::PdfCoreError::InvalidArgument(
-                "target text location no longer exists".to_owned(),
+                "selected text operation no longer exists".to_owned(),
             ));
         }
 
         let op = &mut content.operations[self.op_index];
         if op.operator != "Tj" {
             return Err(pdf_core::PdfCoreError::InvalidArgument(
-                "target text operation changed".to_owned(),
+                "selected text is not directly editable".to_owned(),
             ));
         }
 
@@ -402,19 +313,102 @@ impl DocumentCommand for UpdateTextAtOpCommand {
             Some(Object::String(bytes, _)) => AppController::decode_pdf_text_bytes(bytes),
             _ => {
                 return Err(pdf_core::PdfCoreError::InvalidArgument(
-                    "target text payload changed".to_owned(),
+                    "selected text payload changed".to_owned(),
                 ))
             }
         };
-
         if current_text != self.old_text {
             return Err(pdf_core::PdfCoreError::InvalidArgument(
-                "target text no longer matches selected content".to_owned(),
+                "selected text no longer matches".to_owned(),
             ));
         }
 
         op.operands[0] = lopdf::text_string(&self.new_text);
+        let encoded = content
+            .encode()
+            .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?;
+        stream.dict.remove(b"Filter");
+        stream.dict.remove(b"DecodeParms");
+        stream.dict.set("Length", Object::Integer(encoded.len() as i64));
+        stream.content = encoded;
+        Ok(())
+    }
 
+    fn undo(&mut self, doc: &mut Document) -> Result<(), pdf_core::PdfCoreError> {
+        let snap = self
+            .snapshot
+            .as_ref()
+            .ok_or(pdf_core::PdfCoreError::NotUndoable)?;
+        let restored = lopdf::Document::load_mem(snap)
+            .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?;
+        *doc.inner_mut() = restored;
+        Ok(())
+    }
+}
+
+impl DeleteTextAtOpCommand {
+    fn new(page_index: u32, stream_id: lopdf::ObjectId, op_index: usize, old_text: String) -> Self {
+        Self {
+            page_index,
+            stream_id,
+            op_index,
+            old_text,
+            snapshot: None,
+        }
+    }
+}
+
+impl DocumentCommand for DeleteTextAtOpCommand {
+    fn description(&self) -> &str {
+        "Delete selected text"
+    }
+
+    fn execute(&mut self, doc: &mut Document) -> Result<(), pdf_core::PdfCoreError> {
+        let _ = doc.get_page(self.page_index)?;
+
+        let mut buf = std::io::Cursor::new(Vec::new());
+        doc.inner_mut()
+            .save_to(&mut buf)
+            .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?;
+        self.snapshot = Some(buf.into_inner());
+
+        doc.inner_mut().decompress();
+        let stream = doc
+            .inner_mut()
+            .get_object_mut(self.stream_id)
+            .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?
+            .as_stream_mut()
+            .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?;
+
+        let mut content = Content::decode(&stream.content)
+            .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?;
+        if self.op_index >= content.operations.len() {
+            return Err(pdf_core::PdfCoreError::InvalidArgument(
+                "selected text operation no longer exists".to_owned(),
+            ));
+        }
+
+        let op = &content.operations[self.op_index];
+        if op.operator != "Tj" {
+            return Err(pdf_core::PdfCoreError::InvalidArgument(
+                "selected text is not directly deletable".to_owned(),
+            ));
+        }
+        let current_text = match op.operands.first() {
+            Some(Object::String(bytes, _)) => AppController::decode_pdf_text_bytes(bytes),
+            _ => {
+                return Err(pdf_core::PdfCoreError::InvalidArgument(
+                    "selected text payload changed".to_owned(),
+                ))
+            }
+        };
+        if current_text != self.old_text {
+            return Err(pdf_core::PdfCoreError::InvalidArgument(
+                "selected text no longer matches".to_owned(),
+            ));
+        }
+
+        content.operations.remove(self.op_index);
         let encoded = content
             .encode()
             .map_err(|e| pdf_core::PdfCoreError::LopdfError(e.to_string()))?;
@@ -472,10 +466,55 @@ pub struct AppController {
     image_drag_start_hit: Option<ImageHit>,
     suppress_next_canvas_click: bool,
     text_insert_panel_visible: bool,
+    selected_text_hit: Option<TextHit>,
     insert_text_next_y_by_page: HashMap<u32, f32>,
+    inserted_text_anchors_by_page: HashMap<u32, Vec<InsertedTextAnchor>>,
 }
 
 impl AppController {
+    fn middle_ellipsize_text(input: &str, max_chars: usize) -> String {
+        let total = input.chars().count();
+        if total <= max_chars {
+            return input.to_string();
+        }
+        if max_chars <= 3 {
+            return "...".to_string();
+        }
+
+        let keep = max_chars - 3;
+        let left_keep = keep / 2;
+        let right_keep = keep - left_keep;
+
+        let left = input.chars().take(left_keep).collect::<String>();
+        let right = input
+            .chars()
+            .rev()
+            .take(right_keep)
+            .collect::<Vec<char>>()
+            .into_iter()
+            .rev()
+            .collect::<String>();
+        format!("{left}...{right}")
+    }
+
+    fn middle_ellipsize_path(path: &std::path::Path, max_chars: usize) -> String {
+        let full = path.display().to_string();
+        if full.chars().count() <= max_chars {
+            return full;
+        }
+
+        if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+            let name_chars = name.chars().count();
+            if name_chars + 4 < max_chars {
+                let prefix_budget = max_chars.saturating_sub(name_chars + 3);
+                let prefix = full.chars().take(prefix_budget).collect::<String>();
+                return format!("{prefix}...{name}");
+            }
+        }
+
+        Self::middle_ellipsize_text(&full, max_chars)
+    }
+
     fn prompt_input(title: &str, prompt: &str, default_text: &str) -> Option<String> {
         tinyfiledialogs::input_box(title, prompt, default_text)
     }
@@ -521,7 +560,9 @@ impl AppController {
             image_drag_start_hit: None,
             suppress_next_canvas_click: false,
             text_insert_panel_visible: false,
+            selected_text_hit: None,
             insert_text_next_y_by_page: HashMap::new(),
+            inserted_text_anchors_by_page: HashMap::new(),
         };
         controller.load_recent_documents();
         controller
@@ -630,6 +671,9 @@ impl AppController {
 
         win.on_canvas_clicked(move |x, y| {
             let me = unsafe { &mut *ptr };
+            if let Some(win) = me.window.upgrade() {
+                win.set_status_text(format!("Canvas click: x={:.1}, y={:.1}", x, y).into());
+            }
             if me.suppress_next_canvas_click {
                 me.suppress_next_canvas_click = false;
                 return;
@@ -637,15 +681,18 @@ impl AppController {
             if me.pending_annotation_tool.is_some() {
                 me.place_pending_annotation(x as f32, y as f32);
             } else {
-                me.handle_canvas_edit_click(x as f32, y as f32, false);
+                me.handle_canvas_edit_click(x as f32, y as f32, true);
             }
         });
 
         win.on_canvas_double_clicked(move |x, y| {
             let me = unsafe { &mut *ptr };
+            if let Some(win) = me.window.upgrade() {
+                win.set_status_text(format!("Canvas double-click: x={:.1}, y={:.1}", x, y).into());
+            }
             // Keep double-click behavior aligned with single-click so we don't
             // open the legacy modal text input when users rapidly click text.
-            me.handle_canvas_edit_click(x as f32, y as f32, false);
+            me.handle_canvas_edit_click(x as f32, y as f32, true);
         });
 
         win.on_canvas_press_start(move |x, y| {
@@ -660,7 +707,25 @@ impl AppController {
 
         win.on_canvas_press_end(move |x, y| {
             let me = unsafe { &mut *ptr };
+            let drag_start = me.image_drag_start_canvas;
+            let moved = drag_start
+                .map(|(sx, sy)| ((x as f32 - sx).powi(2) + (y as f32 - sy).powi(2)).sqrt() >= 4.0)
+                .unwrap_or(false);
             me.end_canvas_image_drag(x as f32, y as f32);
+
+            // Treat release without meaningful movement as a click. This path
+            // is robust even when TouchArea `clicked` is swallowed by ScrollView.
+            if !moved {
+                if me.suppress_next_canvas_click {
+                    me.suppress_next_canvas_click = false;
+                    return;
+                }
+                if me.pending_annotation_tool.is_some() {
+                    me.place_pending_annotation(x as f32, y as f32);
+                } else {
+                    me.handle_canvas_edit_click(x as f32, y as f32, true);
+                }
+            }
         });
 
         win.on_delete_current_page(move || {
@@ -740,9 +805,15 @@ impl AppController {
             );
         });
 
+        win.on_text_edit_delete(move || {
+            let me = unsafe { &mut *ptr };
+            me.apply_text_delete_from_panel();
+        });
+
         win.on_text_edit_close(move || {
             let me = unsafe { &mut *ptr };
             me.text_insert_panel_visible = false;
+            me.clear_selected_text_selection();
             me.update_text_insert_panel_display();
         });
 
@@ -874,6 +945,7 @@ impl AppController {
                 self.document = Some(doc);
                 self.current_page = 0;
                 self.insert_text_next_y_by_page.clear();
+                self.inserted_text_anchors_by_page.clear();
                 self.selected_image_resource_name = None;
                 self.selected_image_target = None;
                 self.selected_image_hit = None;
@@ -885,6 +957,7 @@ impl AppController {
                 self.image_drag_start_hit = None;
                 self.suppress_next_canvas_click = false;
                 self.text_insert_panel_visible = false;
+                self.clear_selected_text_selection();
                 if let Some(win) = self.window.upgrade() {
                     win.set_image_drag_active(false);
                 }
@@ -1016,6 +1089,7 @@ impl AppController {
         }
         self.current_page = 0;
         self.insert_text_next_y_by_page.clear();
+        self.inserted_text_anchors_by_page.clear();
         self.selected_image_resource_name = None;
         self.selected_image_target = None;
         self.selected_image_hit = None;
@@ -1027,6 +1101,7 @@ impl AppController {
         self.image_drag_start_hit = None;
         self.suppress_next_canvas_click = false;
         self.text_insert_panel_visible = false;
+        self.clear_selected_text_selection();
         if let Some(win) = self.window.upgrade() {
             win.set_image_drag_active(false);
         }
@@ -1336,8 +1411,12 @@ impl AppController {
             return;
         };
 
-        if let Some(hit) = self.find_image_hit_at_point(px, py) {
+        let image_hit = self
+            .find_image_hit_at_point(px, py)
+            .or_else(|| self.find_nearest_image_hit_at_point(px, py));
+        if let Some(hit) = image_hit {
             self.text_insert_panel_visible = false;
+            self.clear_selected_text_selection();
             self.update_text_insert_panel_display();
             self.selected_image_resource_name = Some(hit.resource_name.clone());
             self.selected_image_target = Some((hit.stream_id, hit.do_op_index));
@@ -1349,23 +1428,84 @@ impl AppController {
             return;
         }
 
-        if let Some(hit) = self.find_text_hit_at_point(px, py) {
-            self.open_text_insert_panel_with_text(&hit.text);
+        if let Some(anchor) = self.find_inserted_text_anchor_at_point(px, py) {
+            let acx = anchor.x + anchor.width * 0.5;
+            let acy = anchor.y + anchor.height * 0.5;
+            let mapped_hit = anchor
+                .target_stream_id
+                .zip(anchor.target_op_index)
+                .and_then(|(sid, op)| self.find_text_hit_by_target(sid, op));
+            let fallback_hit = self
+                .find_nearest_editable_text_hit(acx, acy, Some(&anchor.text))
+                .or_else(|| self.find_nearest_editable_text_hit(px, py, Some(&anchor.text)))
+                .or_else(|| self.find_text_hit_at_point(acx, acy).filter(|h| h.editable))
+                .or_else(|| self.find_nearest_text_hit_at_point(acx, acy).filter(|h| h.editable));
+
+            if let Some(hit) = mapped_hit.or(fallback_hit) {
+                self.clear_selected_image_overlay();
+                self.set_selected_text_selection(Some(hit.clone()));
+                self.open_text_insert_panel_with_text(&hit.text);
+                self.sync_inserted_anchor_from_hit(self.current_page, &hit);
+                self.emit(DocumentEvent::StatusChanged {
+                    message: "Text panel opened for inserted text".into(),
+                });
+                return;
+            }
+            self.clear_selected_image_overlay();
+            // If we cannot map anchor to an editable op, keep a visual selection
+            // marker on the clicked anchor bounds.
+            self.set_selected_text_selection(Some(TextHit {
+                text: anchor.text.clone(),
+                stream_id: (0, 0),
+                op_index: 0,
+                editable: false,
+                x: anchor.x,
+                y: anchor.y,
+                width: anchor.width,
+                height: anchor.height,
+            }));
+            self.open_text_insert_panel_with_text(&anchor.text);
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Inserted text opened (save target not resolved)".into(),
+            });
+            return;
+        }
+
+        let text_hit = self
+            .find_text_hit_at_point(px, py)
+            .filter(|h| h.editable)
+            .or_else(|| self.find_nearest_text_hit_at_point(px, py).filter(|h| h.editable))
+            .or_else(|| self.find_text_hit_at_point(px, py))
+            .or_else(|| self.find_nearest_text_hit_at_point(px, py));
+        if let Some(hit) = text_hit {
+            self.clear_selected_image_overlay();
+            self.set_selected_text_selection(Some(hit.clone()));
+            let selected_text = if hit.editable {
+                hit.text.clone()
+            } else {
+                self.compose_text_run_around_hit(&hit)
+            };
+            self.open_text_insert_panel_with_text(&selected_text);
             self.emit(DocumentEvent::StatusChanged {
                 message: "Text panel opened for selected text".into(),
             });
             return;
         }
 
-        if !notify_miss {
-            // Single click outside image/text: clear active image selection/overlay.
-            self.clear_selected_image_overlay();
-            return;
-        }
-
+        // Click outside image/text: clear active image selection/overlay and
+        // keep a visible status message so misses are diagnosable.
+        self.clear_selected_image_overlay();
+        self.clear_selected_text_selection();
         if notify_miss {
+            let has_text = !self.collect_text_hits_on_page().is_empty();
+            let has_image = !self.page_image_resource_names().is_empty();
             self.emit(DocumentEvent::StatusChanged {
-                message: "No editable text or image found at click location".into(),
+                message: format!(
+                    "No editable text or image found at click location (text_detected={}, image_resources={})",
+                    has_text,
+                    has_image
+                )
+                .into(),
             });
         }
     }
@@ -1384,7 +1524,10 @@ impl AppController {
         let Some((px, py)) = self.canvas_to_pdf_point(canvas_x, canvas_y) else {
             return;
         };
-        let Some(hit) = self.find_image_hit_at_point(px, py) else {
+        let Some(hit) = self
+            .find_image_hit_at_point(px, py)
+            .or_else(|| self.find_nearest_image_hit_at_point(px, py))
+        else {
             return;
         };
 
@@ -1615,6 +1758,7 @@ impl AppController {
         if !self.ensure_document_open() {
             return;
         }
+        self.clear_selected_text_selection();
         self.open_text_insert_panel_with_text("New text");
         self.emit(DocumentEvent::StatusChanged {
             message: "Text insert panel opened".into(),
@@ -1632,6 +1776,11 @@ impl AppController {
 
     fn apply_text_insert_from_panel(&mut self, content_text: String, font_text: String, size_text: String) {
         if !self.ensure_document_open() {
+            return;
+        }
+
+        if self.selected_text_hit.is_some() {
+            self.apply_text_save_from_panel(content_text);
             return;
         }
 
@@ -1667,15 +1816,219 @@ impl AppController {
 
         let cmd = Box::new(InsertTextCommand::new_with_font(
             self.current_page,
-            text,
+            text.clone(),
             x,
             y,
             font_size,
             preferred_font,
         ));
         self.run_tool_command(cmd, "Inserted text");
+        self.remember_inserted_text_anchor(self.current_page, &text, x, y, font_size);
         self.text_insert_panel_visible = true;
         self.update_text_insert_panel_display();
+    }
+
+    fn apply_text_save_from_panel(&mut self, content_text: String) {
+        let Some(hit) = self.selected_text_hit.clone() else {
+            return;
+        };
+
+        let new_text = content_text.trim().to_owned();
+        if new_text.is_empty() {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Save canceled (empty text)".into(),
+            });
+            return;
+        }
+
+        if !hit.editable {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Selected text is not directly editable".into(),
+            });
+            return;
+        }
+
+        if new_text == hit.text {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Text unchanged".into(),
+            });
+            return;
+        }
+
+        let cmd = Box::new(UpdateTextAtOpCommand::new(
+            self.current_page,
+            hit.stream_id,
+            hit.op_index,
+            hit.text.clone(),
+            new_text.clone(),
+        ));
+        self.run_tool_command(cmd, "Saved text");
+
+        // Keep panel open in Save mode so repeated edits are straightforward.
+        if let Some(updated_hit) = self
+            .find_text_hit_by_target(hit.stream_id, hit.op_index)
+            .or_else(|| {
+                self.find_nearest_editable_text_hit(
+                    hit.x + hit.width * 0.5,
+                    hit.y + hit.height * 0.5,
+                    Some(&new_text),
+                )
+            })
+        {
+            self.set_selected_text_selection(Some(updated_hit));
+            if let Some(sel) = self.selected_text_hit.clone() {
+                self.sync_inserted_anchor_from_hit(self.current_page, &sel);
+            }
+        }
+        if let Some(win) = self.window.upgrade() {
+            win.set_text_edit_content_text(SharedString::from(new_text));
+        }
+        self.text_insert_panel_visible = true;
+        self.update_text_insert_panel_display();
+    }
+
+    fn apply_text_delete_from_panel(&mut self) {
+        if !self.ensure_document_open() {
+            return;
+        }
+        let Some(hit) = self.selected_text_hit.clone() else {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Select text first".into(),
+            });
+            return;
+        };
+        if !hit.editable {
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Selected text is not directly deletable".into(),
+            });
+            return;
+        }
+
+        let cmd = Box::new(DeleteTextAtOpCommand::new(
+            self.current_page,
+            hit.stream_id,
+            hit.op_index,
+            hit.text.clone(),
+        ));
+        self.run_tool_command(cmd, "Deleted text");
+
+        self.clear_selected_text_selection();
+        self.text_insert_panel_visible = false;
+        self.update_text_insert_panel_display();
+    }
+
+    fn remember_inserted_text_anchor(
+        &mut self,
+        page_index: u32,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+    ) {
+        let width = (text.chars().count() as f32 * font_size * 0.55).max(10.0);
+        let y_bottom = -font_size * 0.35;
+        let y_top = font_size * 0.95;
+        let mut resolved_target: Option<TextHit> = None;
+        if page_index == self.current_page {
+            let acx = x + width * 0.5;
+            let acy = y + y_bottom + ((y_top - y_bottom) * 0.5);
+            resolved_target = self
+                .find_nearest_editable_text_hit(acx, acy, Some(text))
+                .or_else(|| self.find_nearest_editable_text_hit(x, y, Some(text)));
+        }
+
+        let anchor = InsertedTextAnchor {
+            text: text.to_owned(),
+            x,
+            y: y + y_bottom,
+            width,
+            height: (y_top - y_bottom).max(8.0),
+            target_stream_id: None,
+            target_op_index: None,
+        };
+
+        let entry = self.inserted_text_anchors_by_page.entry(page_index).or_default();
+        entry.push(anchor);
+        if let Some(hit) = resolved_target {
+            if let Some(last) = entry.last_mut() {
+                last.target_stream_id = Some(hit.stream_id);
+                last.target_op_index = Some(hit.op_index);
+                last.text = hit.text.clone();
+                last.x = hit.x;
+                last.y = hit.y;
+                last.width = hit.width;
+                last.height = hit.height;
+            }
+        }
+        if entry.len() > 64 {
+            let excess = entry.len() - 64;
+            entry.drain(0..excess);
+        }
+    }
+
+    fn sync_inserted_anchor_from_hit(&mut self, page_index: u32, hit: &TextHit) {
+        let Some(anchors) = self.inserted_text_anchors_by_page.get_mut(&page_index) else {
+            return;
+        };
+
+        if let Some(anchor) = anchors.iter_mut().find(|a| {
+            a.target_stream_id == Some(hit.stream_id) && a.target_op_index == Some(hit.op_index)
+        }) {
+            anchor.text = hit.text.clone();
+            anchor.x = hit.x;
+            anchor.y = hit.y;
+            anchor.width = hit.width;
+            anchor.height = hit.height;
+            return;
+        }
+
+        if let Some(anchor) = anchors.iter_mut().find(|a| {
+            let acx = a.x + a.width * 0.5;
+            let acy = a.y + a.height * 0.5;
+            let hcx = hit.x + hit.width * 0.5;
+            let hcy = hit.y + hit.height * 0.5;
+            let dist = ((acx - hcx).powi(2) + (acy - hcy).powi(2)).sqrt();
+            dist <= 28.0
+        }) {
+            anchor.target_stream_id = Some(hit.stream_id);
+            anchor.target_op_index = Some(hit.op_index);
+            anchor.text = hit.text.clone();
+            anchor.x = hit.x;
+            anchor.y = hit.y;
+            anchor.width = hit.width;
+            anchor.height = hit.height;
+        }
+    }
+
+    fn find_inserted_text_anchor_at_point(&self, px: f32, py: f32) -> Option<InsertedTextAnchor> {
+        let anchors = self.inserted_text_anchors_by_page.get(&self.current_page)?;
+        anchors
+            .iter()
+            .filter_map(|a| {
+                let tol = 24.0f32;
+                let dx = if px < a.x - tol {
+                    (a.x - tol) - px
+                } else if px > a.x + a.width + tol {
+                    px - (a.x + a.width + tol)
+                } else {
+                    0.0
+                };
+                let dy = if py < a.y - tol {
+                    (a.y - tol) - py
+                } else if py > a.y + a.height + tol {
+                    py - (a.y + a.height + tol)
+                } else {
+                    0.0
+                };
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist <= 64.0 {
+                    Some((a.clone(), dist))
+                } else {
+                    None
+                }
+            })
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(anchor, _)| anchor)
     }
 
     fn sync_text_font_name_from_input(&mut self, font_text: String) {
@@ -1706,9 +2059,46 @@ impl AppController {
         known.into_iter().find(|name| name.eq_ignore_ascii_case(input))
     }
 
+    fn clear_selected_text_selection(&mut self) {
+        self.selected_text_hit = None;
+        self.update_text_selection_display();
+    }
+
+    fn set_selected_text_selection(&mut self, hit: Option<TextHit>) {
+        self.selected_text_hit = hit;
+        self.update_text_selection_display();
+    }
+
+    fn update_text_selection_display(&self) {
+        if let Some(win) = self.window.upgrade() {
+            if let Some(hit) = &self.selected_text_hit {
+                let p0 = self.pdf_to_canvas_point(hit.x, hit.y);
+                let p1 = self.pdf_to_canvas_point(hit.x + hit.width, hit.y + hit.height);
+                if let (Some((x0, y0)), Some((x1, y1))) = (p0, p1) {
+                    let x = x0.min(x1);
+                    let y = y0.min(y1);
+                    let w = (x1 - x0).abs().max(14.0);
+                    let h = (y1 - y0).abs().max(14.0);
+                    win.set_text_selection_x(x);
+                    win.set_text_selection_y(y);
+                    win.set_text_selection_width(w);
+                    win.set_text_selection_height(h);
+                    win.set_text_selection_visible(true);
+                } else {
+                    win.set_text_selection_visible(false);
+                }
+                win.set_text_edit_save_mode(true);
+            } else {
+                win.set_text_selection_visible(false);
+                win.set_text_edit_save_mode(false);
+            }
+        }
+    }
+
     fn update_text_insert_panel_display(&self) {
         if let Some(win) = self.window.upgrade() {
             win.set_text_edit_controls_visible(self.text_insert_panel_visible);
+            win.set_text_edit_save_mode(self.selected_text_hit.is_some());
             if self.text_insert_panel_visible {
                 if win.get_text_edit_content_text().is_empty() {
                     win.set_text_edit_content_text(SharedString::from("New text"));
@@ -2855,21 +3245,262 @@ impl AppController {
         let hits = self.collect_text_hits_on_page();
         hits.into_iter()
             .filter(|h| {
-                let tol = 4.0;
+                // Keep this tolerant because text bounds are estimated from
+                // content operators rather than full glyph shaping.
+                let tol = 20.0;
                 px >= h.x - tol
                     && px <= h.x + h.width + tol
                     && py >= h.y - tol
                     && py <= h.y + h.height + tol
             })
             .min_by(|a, b| {
-            let da = (a.x + a.width * 0.5 - px).powi(2) + (a.y + a.height * 0.5 - py).powi(2);
-            let db = (b.x + b.width * 0.5 - px).powi(2) + (b.y + b.height * 0.5 - py).powi(2);
-            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            let distance_to_rect = |h: &TextHit| {
+                let dx = if px < h.x {
+                    h.x - px
+                } else if px > h.x + h.width {
+                    px - (h.x + h.width)
+                } else {
+                    0.0
+                };
+                let dy = if py < h.y {
+                    h.y - py
+                } else if py > h.y + h.height {
+                    py - (h.y + h.height)
+                } else {
+                    0.0
+                };
+                (dx * dx + dy * dy).sqrt()
+            };
+            let text_score = |h: &TextHit| {
+                let t = h.text.trim();
+                let alnum = t.chars().filter(|c| c.is_alphanumeric()).count() as i32;
+                let len = t.chars().count() as i32;
+                alnum * 4 + len
+            };
+
+            let da = distance_to_rect(a);
+            let db = distance_to_rect(b);
+            da.partial_cmp(&db)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| text_score(b).cmp(&text_score(a)))
+                .then_with(|| {
+                    let aa = (a.width * a.height) as i32;
+                    let ab = (b.width * b.height) as i32;
+                    ab.cmp(&aa)
+                })
         })
     }
 
-    fn find_last_text_on_page(&self) -> Option<TextHit> {
-        self.collect_text_hits_on_page().pop()
+    fn find_nearest_text_hit_at_point(&self, px: f32, py: f32) -> Option<TextHit> {
+        let max_distance = 48.0f32;
+        self.collect_text_hits_on_page()
+            .into_iter()
+            .map(|h| {
+                let dx = if px < h.x {
+                    h.x - px
+                } else if px > h.x + h.width {
+                    px - (h.x + h.width)
+                } else {
+                    0.0
+                };
+                let dy = if py < h.y {
+                    h.y - py
+                } else if py > h.y + h.height {
+                    py - (h.y + h.height)
+                } else {
+                    0.0
+                };
+                let dist = (dx * dx + dy * dy).sqrt();
+                (h, dist)
+            })
+            .filter(|(_, dist)| *dist <= max_distance)
+            .filter(|(h, dist)| {
+                let trimmed = h.text.trim();
+                let total = trimmed.chars().count();
+                let alnum = trimmed.chars().filter(|c| c.is_alphanumeric()).count();
+                let area = h.width * h.height;
+
+                // Avoid snapping to tiny symbol-like fragments unless click is very close.
+                if alnum == 0 && total <= 2 {
+                    return *dist <= 4.0;
+                }
+
+                // Tiny low-information hits are noisy in many PDFs.
+                if area < 120.0 && alnum <= 1 {
+                    return *dist <= 10.0;
+                }
+
+                true
+            })
+            .min_by(|a, b| {
+                let ta = a.0.text.trim();
+                let tb = b.0.text.trim();
+                let qa = ta.chars().filter(|c| c.is_alphanumeric()).count() as i32 * 4
+                    + ta.chars().count() as i32;
+                let qb = tb.chars().filter(|c| c.is_alphanumeric()).count() as i32 * 4
+                    + tb.chars().count() as i32;
+
+                a.1.partial_cmp(&b.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| qb.cmp(&qa))
+                    .then_with(|| {
+                        let aa = (a.0.width * a.0.height) as i32;
+                        let ab = (b.0.width * b.0.height) as i32;
+                        ab.cmp(&aa)
+                    })
+            })
+            .map(|(h, _)| h)
+    }
+
+    fn find_text_hit_by_target(
+        &self,
+        target_stream_id: lopdf::ObjectId,
+        target_op_index: usize,
+    ) -> Option<TextHit> {
+        self.collect_text_hits_on_page().into_iter().find(|h| {
+            h.editable && h.stream_id == target_stream_id && h.op_index == target_op_index
+        })
+    }
+
+    fn find_nearest_editable_text_hit(
+        &self,
+        px: f32,
+        py: f32,
+        expected_text: Option<&str>,
+    ) -> Option<TextHit> {
+        let expected = expected_text.map(str::trim).filter(|s| !s.is_empty());
+        self.collect_text_hits_on_page()
+            .into_iter()
+            .filter(|h| h.editable)
+            .map(|h| {
+                let dx = if px < h.x {
+                    h.x - px
+                } else if px > h.x + h.width {
+                    px - (h.x + h.width)
+                } else {
+                    0.0
+                };
+                let dy = if py < h.y {
+                    h.y - py
+                } else if py > h.y + h.height {
+                    py - (h.y + h.height)
+                } else {
+                    0.0
+                };
+                let dist = (dx * dx + dy * dy).sqrt();
+
+                let mut text_score = 0i32;
+                if let Some(exp) = expected {
+                    let ht = h.text.trim();
+                    if ht == exp {
+                        text_score += 100;
+                    } else if ht.contains(exp) || exp.contains(ht) {
+                        text_score += 40;
+                    }
+                }
+
+                let quality = h
+                    .text
+                    .trim()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .count() as i32;
+
+                (h, dist, text_score, quality)
+            })
+            .min_by(|a, b| {
+                a.1.partial_cmp(&b.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| b.2.cmp(&a.2))
+                    .then_with(|| b.3.cmp(&a.3))
+            })
+            .map(|(h, _, _, _)| h)
+    }
+
+    fn compose_text_run_around_hit(&self, hit: &TextHit) -> String {
+        let all = self.collect_text_hits_on_page();
+        if all.is_empty() {
+            return hit.text.clone();
+        }
+
+        let target_cy = hit.y + hit.height * 0.5;
+        let target_cx = hit.x + hit.width * 0.5;
+        let line_tol = (hit.height * 0.85).max(10.0);
+
+        let mut line_hits: Vec<TextHit> = all
+            .into_iter()
+            .filter(|h| {
+                let cy = h.y + h.height * 0.5;
+                (cy - target_cy).abs() <= line_tol
+            })
+            .collect();
+
+        if line_hits.is_empty() {
+            return hit.text.clone();
+        }
+
+        line_hits.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal));
+
+        let Some(anchor_idx) = line_hits
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| {
+                let acx = a.x + a.width * 0.5;
+                let bcx = b.x + b.width * 0.5;
+                let ad = (acx - target_cx).abs();
+                let bd = (bcx - target_cx).abs();
+                ad.partial_cmp(&bd).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(i, _)| i)
+        else {
+            return hit.text.clone();
+        };
+
+        let gap_threshold = (hit.height * 1.3).max(18.0);
+        let mut left = anchor_idx;
+        while left > 0 {
+            let prev = &line_hits[left - 1];
+            let cur = &line_hits[left];
+            let gap = cur.x - (prev.x + prev.width);
+            if gap > gap_threshold {
+                break;
+            }
+            left -= 1;
+        }
+
+        let mut right = anchor_idx;
+        while right + 1 < line_hits.len() {
+            let cur = &line_hits[right];
+            let next = &line_hits[right + 1];
+            let gap = next.x - (cur.x + cur.width);
+            if gap > gap_threshold {
+                break;
+            }
+            right += 1;
+        }
+
+        let mut out = String::new();
+        for idx in left..=right {
+            let chunk = line_hits[idx].text.trim();
+            if chunk.is_empty() {
+                continue;
+            }
+            if !out.is_empty() {
+                let prev = &line_hits[idx - 1];
+                let cur = &line_hits[idx];
+                let gap = cur.x - (prev.x + prev.width);
+                if gap > (hit.height * 0.35).max(4.0) {
+                    out.push(' ');
+                }
+            }
+            out.push_str(chunk);
+        }
+
+        if out.trim().is_empty() {
+            hit.text.clone()
+        } else {
+            out
+        }
     }
 
     fn collect_text_hits_on_page(&self) -> Vec<TextHit> {
@@ -2992,6 +3623,7 @@ impl AppController {
                             text,
                             stream_id,
                             op_index,
+                            editable: true,
                             x: x_min,
                             y: y_min,
                             width: (x_max - x_min).max(8.0),
@@ -2999,6 +3631,181 @@ impl AppController {
                         });
 
                         // Advance text matrix for subsequent Tj operations.
+                        text_matrix = Self::concat_matrix(
+                            text_matrix,
+                            [1.0, 0.0, 0.0, 1.0, text_width, 0.0],
+                        );
+                    }
+                    "TJ" if in_text => {
+                        let Some(Object::Array(parts)) = op.operands.first() else {
+                            continue;
+                        };
+
+                        let mut text = String::new();
+                        let mut spacing_adjust = 0.0f32;
+                        for part in parts {
+                            match part {
+                                Object::String(bytes, _) => {
+                                    text.push_str(&Self::decode_pdf_text_bytes(bytes));
+                                }
+                                Object::Integer(v) => {
+                                    // In TJ, positive values tighten spacing; negative expand.
+                                    spacing_adjust += -(*v as f32) * font_size / 1000.0;
+                                }
+                                Object::Real(v) => {
+                                    spacing_adjust += -(*v) * font_size / 1000.0;
+                                }
+                                _ => {}
+                            }
+                        }
+                        if text.trim().is_empty() {
+                            continue;
+                        }
+
+                        let text_width =
+                            (text.chars().count() as f32 * font_size * 0.55 + spacing_adjust)
+                                .max(10.0);
+                        let y_bottom = -font_size * 0.35;
+                        let y_top = font_size * 0.95;
+                        let trm = Self::concat_matrix(ctm, text_matrix);
+                        let p0 = Self::transform_point(trm, 0.0, y_bottom);
+                        let p1 = Self::transform_point(trm, text_width, y_bottom);
+                        let p2 = Self::transform_point(trm, 0.0, y_top);
+                        let p3 = Self::transform_point(trm, text_width, y_top);
+                        let xs = [p0.0, p1.0, p2.0, p3.0];
+                        let ys = [p0.1, p1.1, p2.1, p3.1];
+                        let mut x_min = xs[0];
+                        let mut x_max = xs[0];
+                        let mut y_min = ys[0];
+                        let mut y_max = ys[0];
+                        for x in xs {
+                            x_min = x_min.min(x);
+                            x_max = x_max.max(x);
+                        }
+                        for y in ys {
+                            y_min = y_min.min(y);
+                            y_max = y_max.max(y);
+                        }
+
+                        hits.push(TextHit {
+                            text,
+                            stream_id,
+                            op_index,
+                            editable: false,
+                            x: x_min,
+                            y: y_min,
+                            width: (x_max - x_min).max(8.0),
+                            height: (y_max - y_min).max(8.0),
+                        });
+
+                        text_matrix = Self::concat_matrix(
+                            text_matrix,
+                            [1.0, 0.0, 0.0, 1.0, text_width, 0.0],
+                        );
+                    }
+                    "'" if in_text => {
+                        // Move to next text line and show text.
+                        let dy = if leading == 0.0 { -font_size * 1.2 } else { -leading };
+                        let t = [1.0, 0.0, 0.0, 1.0, 0.0, dy];
+                        line_matrix = Self::concat_matrix(line_matrix, t);
+                        text_matrix = line_matrix;
+
+                        let Some(Object::String(bytes, _)) = op.operands.first() else {
+                            continue;
+                        };
+                        let text = Self::decode_pdf_text_bytes(bytes);
+                        if text.trim().is_empty() {
+                            continue;
+                        }
+
+                        let text_width = (text.chars().count() as f32 * font_size * 0.55).max(10.0);
+                        let y_bottom = -font_size * 0.35;
+                        let y_top = font_size * 0.95;
+                        let trm = Self::concat_matrix(ctm, text_matrix);
+                        let p0 = Self::transform_point(trm, 0.0, y_bottom);
+                        let p1 = Self::transform_point(trm, text_width, y_bottom);
+                        let p2 = Self::transform_point(trm, 0.0, y_top);
+                        let p3 = Self::transform_point(trm, text_width, y_top);
+                        let xs = [p0.0, p1.0, p2.0, p3.0];
+                        let ys = [p0.1, p1.1, p2.1, p3.1];
+                        let mut x_min = xs[0];
+                        let mut x_max = xs[0];
+                        let mut y_min = ys[0];
+                        let mut y_max = ys[0];
+                        for x in xs {
+                            x_min = x_min.min(x);
+                            x_max = x_max.max(x);
+                        }
+                        for y in ys {
+                            y_min = y_min.min(y);
+                            y_max = y_max.max(y);
+                        }
+
+                        hits.push(TextHit {
+                            text,
+                            stream_id,
+                            op_index,
+                            editable: false,
+                            x: x_min,
+                            y: y_min,
+                            width: (x_max - x_min).max(8.0),
+                            height: (y_max - y_min).max(8.0),
+                        });
+
+                        text_matrix = Self::concat_matrix(
+                            text_matrix,
+                            [1.0, 0.0, 0.0, 1.0, text_width, 0.0],
+                        );
+                    }
+                    "\"" if in_text => {
+                        // Set spacing and move to next line, then show text.
+                        let dy = if leading == 0.0 { -font_size * 1.2 } else { -leading };
+                        let t = [1.0, 0.0, 0.0, 1.0, 0.0, dy];
+                        line_matrix = Self::concat_matrix(line_matrix, t);
+                        text_matrix = line_matrix;
+
+                        let Some(Object::String(bytes, _)) = op.operands.get(2) else {
+                            continue;
+                        };
+                        let text = Self::decode_pdf_text_bytes(bytes);
+                        if text.trim().is_empty() {
+                            continue;
+                        }
+
+                        let text_width = (text.chars().count() as f32 * font_size * 0.55).max(10.0);
+                        let y_bottom = -font_size * 0.35;
+                        let y_top = font_size * 0.95;
+                        let trm = Self::concat_matrix(ctm, text_matrix);
+                        let p0 = Self::transform_point(trm, 0.0, y_bottom);
+                        let p1 = Self::transform_point(trm, text_width, y_bottom);
+                        let p2 = Self::transform_point(trm, 0.0, y_top);
+                        let p3 = Self::transform_point(trm, text_width, y_top);
+                        let xs = [p0.0, p1.0, p2.0, p3.0];
+                        let ys = [p0.1, p1.1, p2.1, p3.1];
+                        let mut x_min = xs[0];
+                        let mut x_max = xs[0];
+                        let mut y_min = ys[0];
+                        let mut y_max = ys[0];
+                        for x in xs {
+                            x_min = x_min.min(x);
+                            x_max = x_max.max(x);
+                        }
+                        for y in ys {
+                            y_min = y_min.min(y);
+                            y_max = y_max.max(y);
+                        }
+
+                        hits.push(TextHit {
+                            text,
+                            stream_id,
+                            op_index,
+                            editable: false,
+                            x: x_min,
+                            y: y_min,
+                            width: (x_max - x_min).max(8.0),
+                            height: (y_max - y_min).max(8.0),
+                        });
+
                         text_matrix = Self::concat_matrix(
                             text_matrix,
                             [1.0, 0.0, 0.0, 1.0, text_width, 0.0],
@@ -3096,7 +3903,7 @@ impl AppController {
                             y_min = y_min.min(y);
                             y_max = y_max.max(y);
                         }
-                        let tol = 3.0;
+                        let tol = 12.0;
                         if px >= x_min - tol
                             && px <= x_max + tol
                             && py >= y_min - tol
@@ -3131,7 +3938,6 @@ impl AppController {
         })
     }
 
-    #[allow(dead_code)]
     fn find_nearest_image_hit_at_point(&self, px: f32, py: f32) -> Option<ImageHit> {
         let doc = self.document.as_ref()?;
         let page = doc.get_page(self.current_page).ok()?;
@@ -3231,15 +4037,30 @@ impl AppController {
             }
         }
 
-        candidates.into_iter().min_by(|a, b| {
-            let acx = (a.x_min + a.x_max) * 0.5;
-            let acy = (a.y_min + a.y_max) * 0.5;
-            let bcx = (b.x_min + b.x_max) * 0.5;
-            let bcy = (b.y_min + b.y_max) * 0.5;
-            let da = (acx - px).powi(2) + (acy - py).powi(2);
-            let db = (bcx - px).powi(2) + (bcy - py).powi(2);
-            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-        })
+        let max_distance = 36.0f32;
+        candidates
+            .into_iter()
+            .map(|h| {
+                let dx = if px < h.x_min {
+                    h.x_min - px
+                } else if px > h.x_max {
+                    px - h.x_max
+                } else {
+                    0.0
+                };
+                let dy = if py < h.y_min {
+                    h.y_min - py
+                } else if py > h.y_max {
+                    py - h.y_max
+                } else {
+                    0.0
+                };
+                let dist = (dx * dx + dy * dy).sqrt();
+                (h, dist)
+            })
+            .filter(|(_, dist)| *dist <= max_distance)
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(h, _)| h)
     }
 
     fn page_content_stream_ids(
@@ -3793,19 +4614,31 @@ impl AppController {
 
     fn update_recent_documents_display(&self) {
         if let Some(win) = self.window.upgrade() {
-            let entry = |idx: usize| {
+            let full_entry = |idx: usize| {
                 self.recent_documents
                     .get(idx)
                     .map(|p| p.display().to_string())
                     .unwrap_or_default()
                     .into()
             };
+            let display_entry = |idx: usize| {
+                self.recent_documents
+                    .get(idx)
+                    .map(|p| Self::middle_ellipsize_path(p.as_path(), MAX_RECENT_DISPLAY_CHARS))
+                    .unwrap_or_default()
+                    .into()
+            };
             win.set_recent_count(self.recent_documents.len() as i32);
-            win.set_recent_a(entry(0));
-            win.set_recent_b(entry(1));
-            win.set_recent_c(entry(2));
-            win.set_recent_d(entry(3));
-            win.set_recent_e(entry(4));
+            win.set_recent_a(full_entry(0));
+            win.set_recent_b(full_entry(1));
+            win.set_recent_c(full_entry(2));
+            win.set_recent_d(full_entry(3));
+            win.set_recent_e(full_entry(4));
+            win.set_recent_a_display(display_entry(0));
+            win.set_recent_b_display(display_entry(1));
+            win.set_recent_c_display(display_entry(2));
+            win.set_recent_d_display(display_entry(3));
+            win.set_recent_e_display(display_entry(4));
         }
     }
 

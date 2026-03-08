@@ -54,6 +54,88 @@ component NativeMenuItem inherits Rectangle {
     }
 }
 
+component RecentPathMenuItem inherits Rectangle {
+    in property <string> label: "";
+    in property <string> full-label: "";
+    in property <string> shortcut: "";
+    in property <bool> enabled: true;
+    in property <bool> dark-theme: true;
+    callback activated();
+    callback hover-changed(hovered: bool);
+    property <length> shortcut-area-width: 56px;
+
+    height: 24px;
+    border-radius: 3px;
+    border-width: 0px;
+    background: !root.enabled ? transparent
+        : area.pressed ? (root.dark-theme ? #0a1020 : #cbd5e1)
+        : area.has-hover ? (root.dark-theme ? #1f2937 : #e2e8f0)
+        : transparent;
+
+    // Keep the path line within menu width and show a full path tooltip on hover.
+    path-text := Text {
+        x: 8px;
+        width: root.width - root.shortcut-area-width - 12px;
+        height: parent.height;
+        text: root.label;
+        wrap: no-wrap;
+        overflow: elide;
+        color: root.enabled
+            ? (area.pressed ? (root.dark-theme ? #f8fafc : #0f172a)
+                : (root.dark-theme ? #e2e8f0 : #334155))
+            : (root.dark-theme ? #64748b : #94a3b8);
+        font-size: 12px;
+        vertical-alignment: center;
+    }
+
+    shortcut-text := Text {
+        x: root.width - root.shortcut-area-width;
+        width: root.shortcut-area-width - 8px;
+        height: parent.height;
+        text: root.shortcut;
+        color: root.enabled
+            ? (area.pressed ? (root.dark-theme ? #cbd5e1 : #334155)
+                : (root.dark-theme ? #94a3b8 : #64748b))
+            : (root.dark-theme ? #475569 : #94a3b8);
+        font-size: 11px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+
+    if area.has-hover && root.enabled : Rectangle {
+        x: root.width + 6px;
+        y: -2px;
+        width: 460px;
+        height: tooltip-text.height + 12px;
+        background: root.dark-theme ? #0a1020 : #ffffff;
+        border-width: 1px;
+        border-color: root.dark-theme ? #334155 : #cbd5e1;
+        border-radius: 4px;
+
+        tooltip-text := Text {
+            x: 8px;
+            y: 6px;
+            width: parent.width - 16px;
+            text: root.full-label == "" ? root.label : root.full-label;
+            wrap: word-wrap;
+            color: root.dark-theme ? #e2e8f0 : #334155;
+            font-size: 11px;
+        }
+    }
+
+    area := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        changed has-hover => {
+            root.hover-changed(self.has-hover);
+        }
+        clicked => {
+            root.activated();
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: root.tr_app_title;
     min-width: 900px;
@@ -77,6 +159,11 @@ export component AppWindow inherits Window {
     in property <string> recent-c: "";
     in property <string> recent-d: "";
     in property <string> recent-e: "";
+    in property <string> recent-a-display: "";
+    in property <string> recent-b-display: "";
+    in property <string> recent-c-display: "";
+    in property <string> recent-d-display: "";
+    in property <string> recent-e-display: "";
     in property <int>    image-resource-count: 0;
     in property <string> image-resource-a: "";
     in property <string> image-resource-b: "";
@@ -102,6 +189,12 @@ export component AppWindow inherits Window {
     in property <bool>   text-edit-controls-visible: false;
     in property <float>  text-edit-controls-x: 0;
     in property <float>  text-edit-controls-y: 0;
+    in property <bool>   text-selection-visible: false;
+    in property <float>  text-selection-x: 0;
+    in property <float>  text-selection-y: 0;
+    in property <float>  text-selection-width: 0;
+    in property <float>  text-selection-height: 0;
+    in property <bool>   text-edit-save-mode: false;
     in-out property <string> text-edit-content-text: "";
     in-out property <string> text-edit-font-text: "Helvetica";
     in-out property <string> text-edit-size-text: "14";
@@ -127,7 +220,8 @@ export component AppWindow inherits Window {
     property <bool> tools-image-submenu-open: false;
     property <bool> file-open-recent-row-hover: false;
     property <bool> file-open-recent-menu-hover: false;
-    property <bool> file-open-recent-visible: root.file-open-recent-row-hover || root.file-open-recent-menu-hover;
+    property <bool> file-open-recent-bridge-hover: false;
+    property <bool> file-open-recent-visible: root.file-open-recent-row-hover || root.file-open-recent-menu-hover || root.file-open-recent-bridge-hover;
     property <bool> has-document: root.page-count > 0;
     property <length> menu-button-width: root.compact-mode ? 86px : 96px;
     property <length> menu-row-spacing: root.compact-mode ? 6px : 8px;
@@ -262,6 +356,7 @@ export component AppWindow inherits Window {
     callback image-edit-delete();
     callback image-edit-apply-size(width-text: string, height-text: string, keep-aspect: bool);
     callback text-edit-insert(content-text: string, font-text: string, size-text: string);
+    callback text-edit-delete();
     callback text-edit-close();
     callback text-edit-font-changed(font-text: string);
     callback tools-image-resource-prev-page();
@@ -302,6 +397,7 @@ export component AppWindow inherits Window {
             root.tools-image-submenu-open = false;
             root.file-open-recent-row-hover = false;
             root.file-open-recent-menu-hover = false;
+            root.file-open-recent-bridge-hover = false;
         }
     }
 
@@ -312,6 +408,7 @@ export component AppWindow inherits Window {
         if (root.active-menu != 0) {
             root.file-open-recent-row-hover = false;
             root.file-open-recent-menu-hover = false;
+            root.file-open-recent-bridge-hover = false;
         }
     }
 
@@ -549,22 +646,6 @@ export component AppWindow inherits Window {
                     border-width: 1px;
                     border-color: root.color-border;
 
-                    TouchArea {
-                        width: parent.width;
-                        height: parent.height;
-                        scroll-event(ev) => {
-                            if (ev.delta_y < -2px) {
-                                root.next-page();
-                                return accept;
-                            }
-                            if (ev.delta_y > 2px) {
-                                root.prev-page();
-                                return accept;
-                            }
-                            return reject;
-                        }
-                    }
-
                     ScrollView {
                         width: parent.width;
                         height: parent.height;
@@ -595,11 +676,34 @@ export component AppWindow inherits Window {
                                             image-fit: fill;
                                         }
 
+                                        Rectangle {
+                                            visible: root.text-selection-visible;
+                                            x: root.text-selection-x * 1px;
+                                            y: root.text-selection-y * 1px;
+                                            width: root.text-selection-width * 1px;
+                                            height: root.text-selection-height * 1px;
+                                            border-width: 3px;
+                                            border-color: #f59e0b;
+                                            border-radius: 4px;
+                                            background: #f59e0b33;
+                                        }
+
                                         TouchArea {
                                             width: parent.width;
                                             height: parent.height;
-                                            enabled: root.has-document;
+                                            enabled: true;
                                             mouse-cursor: root.image-drag-active ? MouseCursor.grabbing : MouseCursor.default;
+                                            scroll-event(ev) => {
+                                                if (ev.delta_y < -2px) {
+                                                    root.next-page();
+                                                    return accept;
+                                                }
+                                                if (ev.delta_y > 2px) {
+                                                    root.prev-page();
+                                                    return accept;
+                                                }
+                                                return reject;
+                                            }
                                             changed pressed => {
                                                 let mx = self.mouse-x / 1px;
                                                 let my = self.mouse-y / 1px;
@@ -614,11 +718,6 @@ export component AppWindow inherits Window {
                                                     root.canvas-press-move(self.mouse-x / 1px, self.mouse-y / 1px);
                                                 }
                                             }
-                                            clicked => {
-                                                let mx = self.mouse-x / 1px;
-                                                let my = self.mouse-y / 1px;
-                                                root.canvas-clicked(mx, my);
-                                            }
                                             double-clicked => {
                                                 let mx = self.mouse-x / 1px;
                                                 let my = self.mouse-y / 1px;
@@ -632,7 +731,7 @@ export component AppWindow inherits Window {
                                             x: root.image-edit-controls-x * 1px;
                                             y: (root.image-edit-controls-y + (root.image-edit-controls-visible ? 0 : 6)) * 1px;
                                             width: 540px;
-                                            height: 96px;
+                                            height: 124px;
                                             border-width: 1px;
                                             border-color: root.color-border;
                                             border-radius: 8px;
@@ -758,10 +857,12 @@ export component AppWindow inherits Window {
                                         Rectangle {
                                             visible: root.text-edit-controls-visible;
                                             opacity: root.text-edit-controls-visible ? 1 : 0;
-                                            x: root.text-edit-controls-x * 1px;
-                                            y: (root.text-edit-controls-y + (root.text-edit-controls-visible ? 0 : 6)) * 1px;
-                                            width: 480px;
-                                            height: 96px;
+                                            x: max(4px, min(root.text-edit-controls-x * 1px, parent.width - self.width - 4px));
+                                            y: max(4px, min((root.text-edit-controls-y + (root.text-edit-controls-visible ? 0 : 6)) * 1px, parent.height - self.height - 4px));
+                                            // Keep the text panel inside the page viewport so
+                                            // the font-size field and action buttons stay visible.
+                                            width: min(parent.width - 10px, root.compact-mode ? 560px : 760px);
+                                            height: min(parent.height - 10px, root.compact-mode ? 176px : 162px);
                                             border-width: 1px;
                                             border-color: root.color-border;
                                             border-radius: 8px;
@@ -770,60 +871,93 @@ export component AppWindow inherits Window {
                                             animate x { duration: 140ms; }
                                             animate y { duration: 140ms; }
 
-                                            VerticalBox {
-                                                padding: 6px;
-                                                spacing: 4px;
+                                            ScrollView {
+                                                width: parent.width;
+                                                height: parent.height;
 
-                                                HorizontalBox {
-                                                    spacing: 6px;
-                                                    Text { text: root.tr_text; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
-                                                    LineEdit {
-                                                        horizontal-stretch: 1;
-                                                        text: root.text-edit-content-text;
-                                                        edited => { root.text-edit-content-text = self.text; }
-                                                    }
-                                                }
+                                                VerticalBox {
+                                                    padding: 4px;
+                                                    spacing: 3px;
 
-                                                HorizontalBox {
-                                                    spacing: 6px;
-                                                    Text { text: root.tr_font; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
-                                                    ComboBox {
-                                                        width: 190px;
-                                                        model: root.text-font-model;
-                                                        current-value: root.text-edit-font-text;
-                                                        selected(value) => {
-                                                            root.text-edit-font-text = value;
+                                                    HorizontalBox {
+                                                        spacing: 6px;
+                                                        Text { text: root.tr_text; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                        LineEdit {
+                                                            horizontal-stretch: 1;
+                                                            text: root.text-edit-content-text;
+                                                            edited => { root.text-edit-content-text = self.text; }
                                                         }
                                                     }
-                                                    LineEdit {
-                                                        width: 120px;
-                                                        text: root.text-edit-font-text;
-                                                        edited => {
-                                                            root.text-edit-font-text = self.text;
-                                                            root.text-edit-font-changed(self.text);
+
+                                                    HorizontalBox {
+                                                        spacing: 6px;
+                                                        Text { text: root.tr_font; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                        ComboBox {
+                                                            horizontal-stretch: 1;
+                                                            model: root.text-font-model;
+                                                            current-value: root.text-edit-font-text;
+                                                            selected(value) => {
+                                                                root.text-edit-font-text = value;
+                                                                root.text-edit-font-changed(value);
+                                                            }
+                                                        }
+                                                        Text { text: root.tr_size; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
+                                                        LineEdit {
+                                                            width: 88px;
+                                                            text: root.text-edit-size-text;
+                                                            edited => { root.text-edit-size-text = self.text; }
+                                                        }
+                                                        Rectangle {
+                                                            horizontal-stretch: 1;
+                                                            background: transparent;
                                                         }
                                                     }
-                                                    Text { text: root.tr_size; color: root.color-muted; font-size: 11px; vertical-alignment: center; }
-                                                    LineEdit {
-                                                        width: 64px;
-                                                        text: root.text-edit-size-text;
-                                                        edited => { root.text-edit-size-text = self.text; }
-                                                    }
-                                                    Button {
-                                                        width: 80px;
-                                                        text: root.tr_insert;
-                                                        clicked => {
-                                                            root.text-edit-insert(
-                                                                root.text-edit-content-text,
-                                                                root.text-edit-font-text,
-                                                                root.text-edit-size-text
-                                                            );
+
+                                                    HorizontalBox {
+                                                        spacing: 6px;
+                                                        Rectangle {
+                                                            horizontal-stretch: 1;
+                                                            background: transparent;
                                                         }
-                                                    }
-                                                    Button {
-                                                        width: 64px;
-                                                        text: root.tr_close;
-                                                        clicked => { root.text-edit-close(); }
+                                                        Button {
+                                                            width: root.compact-mode ? 86px : 96px;
+                                                            text: root.text-edit-save-mode ? root.tr_save : root.tr_insert;
+                                                            clicked => {
+                                                                root.text-edit-insert(
+                                                                    root.text-edit-content-text,
+                                                                    root.text-edit-font-text,
+                                                                    root.text-edit-size-text
+                                                                );
+                                                            }
+                                                        }
+                                                        if root.text-edit-save-mode : Rectangle {
+                                                            width: 28px;
+                                                            height: 28px;
+                                                            border-width: 1px;
+                                                            border-color: root.color-border;
+                                                            border-radius: 5px;
+                                                            background: root.color-panel-soft;
+                                                            Path {
+                                                                x: 6px;
+                                                                y: 5px;
+                                                                width: 16px;
+                                                                height: 18px;
+                                                                commands: "M 1 4 L 15 4 M 4 4 L 5 16 L 11 16 L 12 4 M 6 4 L 6 2 L 10 2 L 10 4 M 7 7 L 7 13 M 9 7 L 9 13";
+                                                                stroke: root.color-text;
+                                                                stroke-width: 1.2px;
+                                                                fill: transparent;
+                                                            }
+                                                            TouchArea {
+                                                                width: parent.width;
+                                                                height: parent.height;
+                                                                clicked => { root.text-edit-delete(); }
+                                                            }
+                                                        }
+                                                        Button {
+                                                            width: root.compact-mode ? 70px : 76px;
+                                                            text: root.tr_close;
+                                                            clicked => { root.text-edit-close(); }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1068,7 +1202,7 @@ export component AppWindow inherits Window {
             if root.active-menu == 0 && root.file-open-recent-visible : Rectangle {
                 x: (root.compact-mode ? 8px : 10px)
                     + (root.compact-mode ? 128px : 150px)
-                    + 2px;
+                    - 2px;
                 y: root.header-height + (root.compact-mode ? 136px : 150px);
                 width: root.compact-mode ? 250px : 300px;
                 background: root.color-panel;
@@ -1085,19 +1219,25 @@ export component AppWindow inherits Window {
                         color: root.color-muted;
                         font-size: 11px;
                     }
-                    if root.recent-count > 0 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-a; shortcut: "Alt+1"; activated => { root.open-recent(0); root.menu-open = false; } }
-                    if root.recent-count > 1 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-b; shortcut: "Alt+2"; activated => { root.open-recent(1); root.menu-open = false; } }
-                    if root.recent-count > 2 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-c; shortcut: "Alt+3"; activated => { root.open-recent(2); root.menu-open = false; } }
-                    if root.recent-count > 3 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-d; shortcut: "Alt+4"; activated => { root.open-recent(3); root.menu-open = false; } }
-                    if root.recent-count > 4 : NativeMenuItem { dark-theme: root.dark-theme; label: root.recent-e; shortcut: "Alt+5"; activated => { root.open-recent(4); root.menu-open = false; } }
+                    if root.recent-count > 0 : RecentPathMenuItem { width: root.compact-mode ? 238px : 288px; dark-theme: root.dark-theme; label: root.recent-a-display; full-label: root.recent-a; shortcut: "Alt+1"; hover-changed(hovered) => { root.file-open-recent-menu-hover = hovered; } activated => { root.open-recent(0); root.menu-open = false; } }
+                    if root.recent-count > 1 : RecentPathMenuItem { width: root.compact-mode ? 238px : 288px; dark-theme: root.dark-theme; label: root.recent-b-display; full-label: root.recent-b; shortcut: "Alt+2"; hover-changed(hovered) => { root.file-open-recent-menu-hover = hovered; } activated => { root.open-recent(1); root.menu-open = false; } }
+                    if root.recent-count > 2 : RecentPathMenuItem { width: root.compact-mode ? 238px : 288px; dark-theme: root.dark-theme; label: root.recent-c-display; full-label: root.recent-c; shortcut: "Alt+3"; hover-changed(hovered) => { root.file-open-recent-menu-hover = hovered; } activated => { root.open-recent(2); root.menu-open = false; } }
+                    if root.recent-count > 3 : RecentPathMenuItem { width: root.compact-mode ? 238px : 288px; dark-theme: root.dark-theme; label: root.recent-d-display; full-label: root.recent-d; shortcut: "Alt+4"; hover-changed(hovered) => { root.file-open-recent-menu-hover = hovered; } activated => { root.open-recent(3); root.menu-open = false; } }
+                    if root.recent-count > 4 : RecentPathMenuItem { width: root.compact-mode ? 238px : 288px; dark-theme: root.dark-theme; label: root.recent-e-display; full-label: root.recent-e; shortcut: "Alt+5"; hover-changed(hovered) => { root.file-open-recent-menu-hover = hovered; } activated => { root.open-recent(4); root.menu-open = false; } }
                 }
+            }
 
-                recent_hover_area := TouchArea {
-                    width: parent.width;
-                    height: parent.height;
-                    changed has-hover => {
-                        root.file-open-recent-menu-hover = self.has-hover;
-                    }
+            if root.active-menu == 0 && root.file-open-recent-visible : TouchArea {
+                // Hover bridge prevents submenu from disappearing while crossing
+                // the tiny gap between "Open Recent" row and recent-files panel.
+                x: (root.compact-mode ? 8px : 10px)
+                    + (root.compact-mode ? 128px : 150px)
+                    - 8px;
+                y: root.header-height + (root.compact-mode ? 136px : 150px);
+                width: 12px;
+                height: root.compact-mode ? 180px : 220px;
+                changed has-hover => {
+                    root.file-open-recent-bridge-hover = self.has-hover;
                 }
             }
         }

@@ -1,0 +1,13 @@
+{
+  "name": "free-pdf-editor-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test:smoke": "node test/smoke.mjs",
+    "test:regression": "node test/regression.mjs"
+  },
+  "dependencies": {
+    "webdriverio": "^8.39.1"
+  }
+}
