@@ -8,27 +8,22 @@ name = "pdf-editor"
 path = "src/main.rs"
 
 [dependencies]
+qmetaobject = "0.2"
+cstr = "0.2"
 pdf-core     = { path = "../pdf-core" }
 pdf-render   = { path = "../pdf-render" }
 pdf-editor   = { path = "../pdf-editor" }
 pdf-annotations = { path = "../pdf-annotations" }
-pdf-forms    = { path = "../pdf-forms" }
-licensing    = { path = "../services/licensing" }
-slint        = "1.9"
-tracing      = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rfd          = "0.15"
 tinyfiledialogs = "3.9"
-lopdf = "0.39"
 image = "0.25"
-dark-light = "1.1"
+base64 = "0.22"
+tracing      = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sys-locale = "0.3"
 
-[build-dependencies]
-slint-build = "1.9"
-serde_json = "1"
-
 [features]
-# Enable real MuPDF-backed rasterization.
-# Requires cmake, clang/MSVC, and other native build tools to be present.
 mupdf = ["pdf-render/mupdf"]
+
+[build-dependencies]
+serde_json = "1"

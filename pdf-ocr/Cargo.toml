@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Tesseract-backed OcrProvider for pdf-core"
 
+[features]
+default = []
+tesseract = ["dep:tesseract"]
+
 [dependencies]
 pdf-core = { path = "../pdf-core" }
-tesseract = "0.15"
+tesseract = { version = "0.15", optional = true }
 tracing = "0.1"

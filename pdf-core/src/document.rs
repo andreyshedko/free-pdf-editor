@@ -182,6 +182,17 @@ impl Document {
         Ok(out)
     }
 
+    /// Serialize the current in-memory state into bytes without requiring
+    /// mutable access to the document.
+    pub fn to_bytes_snapshot(&self) -> Result<Vec<u8>, PdfCoreError> {
+        let mut out = Vec::new();
+        let mut cloned = self.inner.clone();
+        cloned
+            .save_to(&mut out)
+            .map_err(|e| PdfCoreError::LopdfError(e.to_string()))?;
+        Ok(out)
+    }
+
     /// Save the document as an incremental update appended to the original file
     /// bytes.  When the document was opened from disk the original raw bytes are
     /// retained; the new revision is appended, making the resulting PDF smaller

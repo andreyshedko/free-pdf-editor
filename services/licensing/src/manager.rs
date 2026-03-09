@@ -604,8 +604,8 @@ mod tests {
         let source_path = source_dir.path().join("test.pdfeditor-license");
         std::fs::write(&source_path, serde_json::to_string(&license).unwrap()).unwrap();
 
-        // Guard that restores (or removes) XDG_CONFIG_HOME even on panic,
-        // preventing this test from polluting parallel test environments.
+        // Guard that restores (or removes) env vars even on panic, preventing
+        // this test from polluting parallel test environments.
         struct EnvGuard {
             key: &'static str,
             old: Option<String>,
@@ -618,15 +618,20 @@ mod tests {
                 }
             }
         }
-        let _guard = EnvGuard {
+        let _xdg_guard = EnvGuard {
             key: "XDG_CONFIG_HOME",
             old: std::env::var("XDG_CONFIG_HOME").ok(),
         };
+        let _appdata_guard = EnvGuard {
+            key: "APPDATA",
+            old: std::env::var("APPDATA").ok(),
+        };
 
-        // Point XDG_CONFIG_HOME to an isolated tempdir so the test doesn't
+        // Point storage env vars to an isolated tempdir so the test doesn't
         // touch the developer's real license directory.
         let storage_dir = tempfile::tempdir().unwrap();
         std::env::set_var("XDG_CONFIG_HOME", storage_dir.path());
+        std::env::set_var("APPDATA", storage_dir.path());
 
         // Create a fresh manager; it should start in trial/personal state
         // because the storage tempdir contains no license yet.
@@ -648,6 +653,9 @@ mod tests {
         );
 
         // The license file must have been persisted to the storage path.
+        #[cfg(target_os = "windows")]
+        let expected_dest = storage_dir.path().join("PdfEditor").join("license.json");
+        #[cfg(not(target_os = "windows"))]
         let expected_dest = storage_dir.path().join("pdfeditor").join("license.json");
         assert!(
             expected_dest.exists(),

@@ -180,7 +180,8 @@ impl RenderEngine for MuPdfRenderer {
         page_index: u32,
         zoom: f32,
     ) -> Result<RenderedPage, RenderError> {
-        Self::render_from_path(&doc.path, page_index, zoom).or_else(|mupdf_err| {
+        let bytes = doc.to_bytes_snapshot().map_err(RenderError::Document)?;
+        Self::render_from_bytes(&bytes, page_index, zoom).or_else(|mupdf_err| {
             tracing::debug!("MuPDF render failed ({mupdf_err}), falling back to software renderer");
             SoftwareRenderer.render_page(doc, page_index, zoom)
         })

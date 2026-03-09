@@ -12,7 +12,9 @@ members = [
     "platform/updater",
     "tools/license-generator",
 ]
+exclude = ["app-desktop-qt"]
 resolver = "2"
 
 [patch.crates-io]
 mupdf = { path = "patches/mupdf" }
+mupdf-sys = { path = "patches/mupdf-sys" }

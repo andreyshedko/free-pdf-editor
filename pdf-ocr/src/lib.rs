@@ -93,6 +93,8 @@ impl OcrProvider for TesseractOcrProvider {
         width: u32,
         height: u32,
     ) -> Result<OcrResult, Box<dyn std::error::Error + Send + Sync>> {
+        #[cfg(feature = "tesseract")]
+        {
         use tesseract::Tesseract;
 
         let datapath = self.datapath.as_deref();
@@ -148,6 +150,16 @@ impl OcrProvider for TesseractOcrProvider {
             regions,
             full_text,
         })
+        }
+
+        #[cfg(not(feature = "tesseract"))]
+        {
+            let _ = (page_index, page_image, width, height);
+            Err(
+                "pdf-ocr was built without the `tesseract` feature; enable it to run OCR"
+                    .into(),
+            )
+        }
     }
 }
 

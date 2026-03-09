@@ -310,7 +310,7 @@ impl DocumentCommand for UpdateTextAtOpCommand {
         }
 
         let current_text = match op.operands.first() {
-            Some(Object::String(bytes, _)) => AppController::decode_pdf_text_bytes(bytes),
+            Some(obj @ Object::String(_, _)) => AppController::decode_pdf_text_object(obj),
             _ => {
                 return Err(pdf_core::PdfCoreError::InvalidArgument(
                     "selected text payload changed".to_owned(),
@@ -395,7 +395,7 @@ impl DocumentCommand for DeleteTextAtOpCommand {
             ));
         }
         let current_text = match op.operands.first() {
-            Some(Object::String(bytes, _)) => AppController::decode_pdf_text_bytes(bytes),
+            Some(obj @ Object::String(_, _)) => AppController::decode_pdf_text_object(obj),
             _ => {
                 return Err(pdf_core::PdfCoreError::InvalidArgument(
                     "selected text payload changed".to_owned(),
@@ -671,9 +671,6 @@ impl AppController {
 
         win.on_canvas_clicked(move |x, y| {
             let me = unsafe { &mut *ptr };
-            if let Some(win) = me.window.upgrade() {
-                win.set_status_text(format!("Canvas click: x={:.1}, y={:.1}", x, y).into());
-            }
             if me.suppress_next_canvas_click {
                 me.suppress_next_canvas_click = false;
                 return;
@@ -687,9 +684,6 @@ impl AppController {
 
         win.on_canvas_double_clicked(move |x, y| {
             let me = unsafe { &mut *ptr };
-            if let Some(win) = me.window.upgrade() {
-                win.set_status_text(format!("Canvas double-click: x={:.1}, y={:.1}", x, y).into());
-            }
             // Keep double-click behavior aligned with single-click so we don't
             // open the legacy modal text input when users rapidly click text.
             me.handle_canvas_edit_click(x as f32, y as f32, true);
@@ -1438,8 +1432,7 @@ impl AppController {
             let fallback_hit = self
                 .find_nearest_editable_text_hit(acx, acy, Some(&anchor.text))
                 .or_else(|| self.find_nearest_editable_text_hit(px, py, Some(&anchor.text)))
-                .or_else(|| self.find_text_hit_at_point(acx, acy).filter(|h| h.editable))
-                .or_else(|| self.find_nearest_text_hit_at_point(acx, acy).filter(|h| h.editable));
+                .or_else(|| self.find_editable_text_hit_by_exact_text(&anchor.text));
 
             if let Some(hit) = mapped_hit.or(fallback_hit) {
                 self.clear_selected_image_overlay();
@@ -1488,6 +1481,18 @@ impl AppController {
             self.open_text_insert_panel_with_text(&selected_text);
             self.emit(DocumentEvent::StatusChanged {
                 message: "Text panel opened for selected text".into(),
+            });
+            return;
+        }
+
+        // Fallback: when hit-testing misses (zoom/scroll/transform drift),
+        // still allow editing by selecting the nearest editable text run.
+        if let Some(hit) = self.find_nearest_editable_text_hit(px, py, None) {
+            self.clear_selected_image_overlay();
+            self.set_selected_text_selection(Some(hit.clone()));
+            self.open_text_insert_panel_with_text(&hit.text);
+            self.emit(DocumentEvent::StatusChanged {
+                message: "Text panel opened for nearest editable text".into(),
             });
             return;
         }
@@ -2002,33 +2007,37 @@ impl AppController {
 
     fn find_inserted_text_anchor_at_point(&self, px: f32, py: f32) -> Option<InsertedTextAnchor> {
         let anchors = self.inserted_text_anchors_by_page.get(&self.current_page)?;
-        anchors
-            .iter()
-            .filter_map(|a| {
-                let tol = 24.0f32;
-                let dx = if px < a.x - tol {
-                    (a.x - tol) - px
-                } else if px > a.x + a.width + tol {
-                    px - (a.x + a.width + tol)
-                } else {
-                    0.0
-                };
-                let dy = if py < a.y - tol {
-                    (a.y - tol) - py
-                } else if py > a.y + a.height + tol {
-                    py - (a.y + a.height + tol)
-                } else {
-                    0.0
-                };
-                let dist = (dx * dx + dy * dy).sqrt();
-                if dist <= 64.0 {
-                    Some((a.clone(), dist))
-                } else {
-                    None
-                }
-            })
-            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(anchor, _)| anchor)
+        let tol = 40.0f32;
+        let mut best: Option<(InsertedTextAnchor, f32)> = None;
+
+        for a in anchors {
+            let dx = if px < a.x - tol {
+                (a.x - tol) - px
+            } else if px > a.x + a.width + tol {
+                px - (a.x + a.width + tol)
+            } else {
+                0.0
+            };
+            let dy = if py < a.y - tol {
+                (a.y - tol) - py
+            } else if py > a.y + a.height + tol {
+                py - (a.y + a.height + tol)
+            } else {
+                0.0
+            };
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            match &best {
+                Some((_, best_dist)) if dist >= *best_dist => {}
+                _ => best = Some((a.clone(), dist)),
+            }
+        }
+
+        let (anchor, dist) = best?;
+        if dist <= 120.0 {
+            return Some(anchor);
+        }
+        None
     }
 
     fn sync_text_font_name_from_input(&mut self, font_text: String) {
@@ -3090,9 +3099,11 @@ impl AppController {
         None
     }
 
-    fn decode_pdf_text_bytes(bytes: &[u8]) -> String {
-        let obj = Object::String(bytes.to_vec(), lopdf::StringFormat::Literal);
-        lopdf::decode_text_string(&obj).unwrap_or_else(|_| String::from_utf8_lossy(bytes).into_owned())
+    fn decode_pdf_text_object(obj: &Object) -> String {
+        lopdf::decode_text_string(obj).unwrap_or_else(|_| match obj {
+            Object::String(bytes, _) => String::from_utf8_lossy(bytes).into_owned(),
+            _ => String::new(),
+        })
     }
 
     fn decode_stream_content(stream: &lopdf::Stream) -> Option<Content> {
@@ -3369,6 +3380,7 @@ impl AppController {
         expected_text: Option<&str>,
     ) -> Option<TextHit> {
         let expected = expected_text.map(str::trim).filter(|s| !s.is_empty());
+        let max_distance = if expected.is_some() { 220.0 } else { 96.0 };
         self.collect_text_hits_on_page()
             .into_iter()
             .filter(|h| h.editable)
@@ -3388,6 +3400,9 @@ impl AppController {
                     0.0
                 };
                 let dist = (dx * dx + dy * dy).sqrt();
+                if dist > max_distance {
+                    return (h, f32::INFINITY, i32::MIN, i32::MIN);
+                }
 
                 let mut text_score = 0i32;
                 if let Some(exp) = expected {
@@ -3396,6 +3411,10 @@ impl AppController {
                         text_score += 100;
                     } else if ht.contains(exp) || exp.contains(ht) {
                         text_score += 40;
+                    } else {
+                        // When caller expects specific inserted text, avoid
+                        // snapping to unrelated glyphs like "$".
+                        text_score -= 80;
                     }
                 }
 
@@ -3408,6 +3427,7 @@ impl AppController {
 
                 (h, dist, text_score, quality)
             })
+            .filter(|(_, dist, _, _)| dist.is_finite())
             .min_by(|a, b| {
                 a.1.partial_cmp(&b.1)
                     .unwrap_or(std::cmp::Ordering::Equal)
@@ -3415,6 +3435,21 @@ impl AppController {
                     .then_with(|| b.3.cmp(&a.3))
             })
             .map(|(h, _, _, _)| h)
+    }
+
+    fn find_editable_text_hit_by_exact_text(&self, expected_text: &str) -> Option<TextHit> {
+        let expected = expected_text.trim();
+        if expected.is_empty() {
+            return None;
+        }
+        self.collect_text_hits_on_page()
+            .into_iter()
+            .filter(|h| h.editable && h.text.trim() == expected)
+            .max_by(|a, b| {
+                (a.width * a.height)
+                    .partial_cmp(&(b.width * b.height))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     }
 
     fn compose_text_run_around_hit(&self, hit: &TextHit) -> String {
@@ -3588,10 +3623,10 @@ impl AppController {
                         }
                     }
                     "Tj" if in_text => {
-                        let Some(Object::String(bytes, _)) = op.operands.first() else {
+                        let Some(obj @ Object::String(_, _)) = op.operands.first() else {
                             continue;
                         };
-                        let text = Self::decode_pdf_text_bytes(bytes);
+                        let text = Self::decode_pdf_text_object(obj);
                         if text.trim().is_empty() {
                             continue;
                         }
@@ -3645,8 +3680,8 @@ impl AppController {
                         let mut spacing_adjust = 0.0f32;
                         for part in parts {
                             match part {
-                                Object::String(bytes, _) => {
-                                    text.push_str(&Self::decode_pdf_text_bytes(bytes));
+                                obj @ Object::String(_, _) => {
+                                    text.push_str(&Self::decode_pdf_text_object(obj));
                                 }
                                 Object::Integer(v) => {
                                     // In TJ, positive values tighten spacing; negative expand.
@@ -3710,10 +3745,10 @@ impl AppController {
                         line_matrix = Self::concat_matrix(line_matrix, t);
                         text_matrix = line_matrix;
 
-                        let Some(Object::String(bytes, _)) = op.operands.first() else {
+                        let Some(obj @ Object::String(_, _)) = op.operands.first() else {
                             continue;
                         };
-                        let text = Self::decode_pdf_text_bytes(bytes);
+                        let text = Self::decode_pdf_text_object(obj);
                         if text.trim().is_empty() {
                             continue;
                         }
@@ -3764,10 +3799,10 @@ impl AppController {
                         line_matrix = Self::concat_matrix(line_matrix, t);
                         text_matrix = line_matrix;
 
-                        let Some(Object::String(bytes, _)) = op.operands.get(2) else {
+                        let Some(obj @ Object::String(_, _)) = op.operands.get(2) else {
                             continue;
                         };
-                        let text = Self::decode_pdf_text_bytes(bytes);
+                        let text = Self::decode_pdf_text_object(obj);
                         if text.trim().is_empty() {
                             continue;
                         }
