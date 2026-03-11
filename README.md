@@ -1,11 +1,29 @@
 ﻿# Free PDF Editor (Desktop)
 
-Cross-platform offline-first desktop PDF editor built with **Rust**, **Qt/QML** UI, **lopdf** (document model), and **MuPDF** (rendering).
+This project contains two parallel implementations of a desktop PDF editor:
 
-## C++/Qt6 migration scaffold
+1.  **Rust Implementation (Stable)**: A feature-rich, mature backend written in pure Rust. It uses `lopdf` for document manipulation and `MuPDF` for rendering. The full functionality of this version is documented in the second half of this README.
+2.  **C++/Qt Implementation (In-Progress)**: A new, ongoing rewrite of the application in C++ with a modern Qt Widgets UI. This is the future direction of the project. It uses `PDFium` as a rendering engine.
 
-A new C++/Qt6 project scaffold is now available in `src/` and is built with CMake.
-It now includes layered modules (`app/ui/editor/document/overlay/pdf_engine/cache/ocr`) and compiles to `pdf-editor.exe`.
+## C++/Qt Application (Next Generation)
+
+This is the next-generation, cross-platform desktop PDF editor built with **C++20** and **Qt 6 Widgets**. The source code is located in the `src/` directory and is built with CMake.
+
+### C++ Architecture
+
+The C++ application is structured into the following modules:
+
+-   `app`: Main application entry point and event loop.
+-   `ui`: Qt Widgets-based UI components, including the main window, toolbar, and panels.
+-   `editor`: Manages the application state, including the undo/redo stack (`UndoStack`) and user interactions (`EditorController`).
+-   `document`: Handles the core PDF document structure (`Document`, `PageModel`).
+-   `pdf_engine`: A bridge to the PDFium library for rendering (`PdfRenderer`) and writing (`PdfWriter`).
+-   `cache`: Provides a `PageRenderCache` for efficient page rendering.
+-   `overlay`: Manages UI objects for annotations, text, and selections.
+-   `ocr`: Provides OCR capabilities via `OCRProcessor`.
+-   `utils`: Contains shared utilities for logging and file operations.
+
+### Build & Run (C++)
 
 Build (from repo root):
 
@@ -14,41 +32,45 @@ cmake -S . -B build-cpp
 cmake --build build-cpp --config Release
 ```
 
-Windows + Qt MinGW (explicit toolchain paths):
+**Windows + Qt MinGW (specific toolchain):**
+
+If you have Qt installed for MinGW, you can use the following commands:
 
 ```powershell
+# Ensure your Qt and MinGW bin directories are in the PATH
 $env:PATH = "C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.10.2\mingw_64\bin;$env:PATH"
+
+# Configure with CMake
 & "C:\Program Files\CMake\bin\cmake.exe" -S . -B build-cpp-mingw `
   -G "MinGW Makefiles" `
   -DCMAKE_PREFIX_PATH="C:/Qt/6.10.2/mingw_64" `
   -DCMAKE_C_COMPILER="C:/Qt/Tools/mingw1310_64/bin/gcc.exe" `
   -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe" `
   -DCMAKE_MAKE_PROGRAM="C:/Qt/Tools/mingw1310_64/bin/mingw32-make.exe"
+
+# Build with CMake
 & "C:\Program Files\CMake\bin\cmake.exe" --build build-cpp-mingw -j 8
 ```
 
-Optional runtime dependencies:
-
-```powershell
-# PDFium runtime (if pdfium.dll is not in PATH)
-$env:PDFIUM_DLL="C:\\path\\to\\pdfium.dll"
-
-# OCR runtime (if tesseract.exe is not in PATH)
-$env:PATH="C:\\Program Files\\Tesseract-OCR;$env:PATH"
-```
-
-Run:
+**Run the application:**
 
 ```bash
 # Linux/macOS
 ./build-cpp/src/pdf-editor
 
 # Windows (Visual Studio generator)
-build-cpp\\src\\Release\\pdf-editor.exe
+build-cpp\src\Release\pdf-editor.exe
 
 # Windows (MinGW generator)
-build-cpp-mingw\\src\\pdf-editor.exe
+build-cpp-mingw\src\pdf-editor.exe
 ```
+
+---
+
+## Rust Implementation (Legacy & Core Logic)
+
+The original implementation is a cross-platform offline-first desktop PDF editor built with **Rust**, **lopdf** (document model), and **MuPDF** (rendering). While the UI is being replaced by the C++ version, the underlying Rust crates contain a comprehensive and robust implementation of PDF functionality.
+
 
 ## Implemented functionality
 

@@ -1,8 +1,0 @@
-[env]
-# Force MuPDF's Windows build to use VS2022 toolset. `mupdf-sys` may
-# incorrectly fall back to v142 with newer Build Tools installs.
-MUPDF_MSVC_PLATFORM_TOOLSET = "v143"
-# Required by bindgen used in `mupdf-sys`.
-LIBCLANG_PATH = "C:\\Program Files\\LLVM\\bin"
-# Slint's build step can overflow default stack on Windows for complex UI trees.
-RUST_MIN_STACK = "16777216"
