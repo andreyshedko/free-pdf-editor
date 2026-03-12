@@ -1,0 +1,8 @@
+document_autogen/timestamp: \
+	C:/Users/shche/free-pdf-editor/src/CMakeLists.txt \
+	C:/Users/shche/free-pdf-editor/src/document/Document.cpp \
+	C:/Users/shche/free-pdf-editor/src/document/Document.h \
+	C:/Users/shche/free-pdf-editor/src/document/DocumentMetadata.h \
+	C:/Users/shche/free-pdf-editor/src/document/PageModel.cpp \
+	C:/Users/shche/free-pdf-editor/src/document/PageModel.h \
+	C:/Program\ Files/CMake/bin/cmake.exe

@@ -18,6 +18,7 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
 
 private:
+    void setModernTheme();
     void setupUi();
     void setupActions();
     void rebuildRecentMenu();

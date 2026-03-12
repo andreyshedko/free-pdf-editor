@@ -8,7 +8,9 @@
 #include "pdf_engine/PdfWriter.h"
 
 #include <QObject>
+#include <QImage>
 #include <QStringList>
+#include <vector>
 
 namespace editor {
 
@@ -40,10 +42,57 @@ public:
 
     [[nodiscard]] int currentPage() const;
     [[nodiscard]] int pageCount() const;
+    [[nodiscard]] bool isOpen() const;
     [[nodiscard]] QImage renderCurrentPage(float zoom) const;
     [[nodiscard]] const document::PageModel* currentPageModel() const;
 
     [[nodiscard]] QStringList recentFiles() const;
+
+        // Advanced feature actions
+        void underlineAnnotation();
+        void strikeoutAnnotation();
+        void stickyNoteAnnotation();
+        void commentAnnotation();
+        void drawShape();
+        void drawArrow();
+        void editText();
+        void changeFont();
+        void changeFontSize();
+        void moveTextBlock();
+        void moveImage();
+        void replaceImage();
+        void deleteImage();
+        void resizeImage();
+        void createFormField();
+        void editFormField();
+        void fillForm();
+        void exportFormData();
+        void drawSignature();
+        void insertImageSignature();
+        void saveSignature();
+        void applySignature();
+        void hideText();
+        void hideImages();
+        void applyPermanentRedaction();
+        void passwordProtection();
+        void restrictPrinting();
+        void restrictCopying();
+        void digitalSignature();
+        void sharedAnnotations();
+        void commentsCollab();
+
+        bool insertBlankPage();
+        int findInOverlays(const QString& needle) const;
+        bool editTextValue(const QString& newValue);
+        bool setTextFontTag(const QString& fontTag);
+        bool setTextFontSize(qreal size);
+        bool moveFirstTextBlock(const QPointF& delta);
+        bool moveFirstImage(const QPointF& delta);
+        bool resizeFirstImage(qreal scale);
+        bool mergeWithDocument(const QString& path);
+        bool mergeWithDocumentTo(const QString& sourcePath, const QString& outputPath);
+        bool splitCurrentPageTo(const QString& path);
+        bool splitPagesTo(const QString& path, const std::vector<int>& pageIndexes);
 
 signals:
     void documentChanged();
@@ -64,6 +113,10 @@ private:
     SelectionManager m_selection;
     int m_currentPage {0};
     QStringList m_recentFiles;
+    QImage m_savedSignature;
+    bool m_passwordProtected {false};
+    bool m_restrictPrinting {false};
+    bool m_restrictCopying {false};
 };
 
 } // namespace editor

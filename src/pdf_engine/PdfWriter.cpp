@@ -96,4 +96,36 @@ bool PdfWriter::save(const document::Document& document, const QString& path, Pd
     return true;
 }
 
+bool PdfWriter::saveRenderedPages(const QVector<QImage>& pages, const QString& path) const {
+    if (pages.isEmpty()) {
+        return false;
+    }
+
+    QPdfWriter writer(path);
+    writer.setResolution(144);
+
+    QPainter painter(&writer);
+    if (!painter.isActive()) {
+        return false;
+    }
+
+    bool hasDrawnPage = false;
+    for (const QImage& page : pages) {
+        if (page.isNull()) {
+            continue;
+        }
+
+        writer.setPageSize(QPageSize(QSizeF(page.width(), page.height()), QPageSize::Point));
+        if (hasDrawnPage) {
+            writer.newPage();
+        }
+
+        painter.drawImage(QRect(0, 0, page.width(), page.height()), page);
+        hasDrawnPage = true;
+    }
+
+    painter.end();
+    return hasDrawnPage;
+}
+
 } // namespace pdf_engine

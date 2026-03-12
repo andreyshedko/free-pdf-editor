@@ -1,0 +1,7 @@
+utils_autogen/timestamp: \
+	C:/Users/shche/free-pdf-editor/src/CMakeLists.txt \
+	C:/Users/shche/free-pdf-editor/src/utils/FileUtils.cpp \
+	C:/Users/shche/free-pdf-editor/src/utils/FileUtils.h \
+	C:/Users/shche/free-pdf-editor/src/utils/Logger.cpp \
+	C:/Users/shche/free-pdf-editor/src/utils/Logger.h \
+	C:/Program\ Files/CMake/bin/cmake.exe

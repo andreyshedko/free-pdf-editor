@@ -113,6 +113,9 @@ add_library(app
 target_include_directories(app PUBLIC ${SRC_ROOT})
 target_link_libraries(app PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets ui)
 
+# Add translations
+add_subdirectory(translations)
+
 add_executable(pdf-editor
     app/main.cpp
 )
