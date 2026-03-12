@@ -92,16 +92,16 @@ cmake --build build -j 8
 
 ## Features
 
-- **Multi-language UI** — Automatic language detection (English, Spanish, French, German, Czech, Polish, Russian)
-- **Overlay-Based Editing** — Text, images, annotations as Qt graphics objects with real-time rendering
-- **Undo/Redo Stack** — Full command pattern support for all editing operations
-- **Page Management** — Insert, delete, merge, split PDF documents
-- **Text Editing** — Edit text, change fonts, adjust font sizes  
-- **Image Handling** — Insert, move, and resize images
-- **Annotations** — Support for highlights, underlines, strikeouts, notes
-- **Export** — Export pages as PNG images or plain text
-- **Signatures** — Digital signature support
-- **Security** — Password protection and content redaction
+- **Multi-language UI** ï¿½ Automatic language detection (English, Spanish, French, German, Czech, Polish, Russian)
+- **Overlay-Based Editing** ï¿½ Text, images, annotations as Qt graphics objects with real-time rendering
+- **Undo/Redo Stack** ï¿½ Full command pattern support for all editing operations
+- **Page Management** ï¿½ Insert, delete, merge, split PDF documents
+- **Text Editing** ï¿½ Edit text, change fonts, adjust font sizes  
+- **Image Handling** ï¿½ Insert, move, and resize images
+- **Annotations** ï¿½ Support for highlights, underlines, strikeouts, notes
+- **Export** ï¿½ Export pages as PNG images or plain text
+- **Signatures** ï¿½ Digital signature support
+- **Security** ï¿½ Password protection and content redaction
 
 ## Project Structure
 
@@ -123,10 +123,10 @@ L-- translations/     # Translation files (.ts) for i18n
 
 ### Code Organization
 
-- **Overlay Model** — UI objects (TextEditObject, ImageObject, etc.) on top of rendered PDF pages
-- **EditorController** — Central API coordinating document, PDF engine, overlays, and undo stack
-- **Command Pattern** — All mutations go through Command subclasses for undo/redo support
-- **Qt Signals/Slots** — Loose coupling between UI and business logic
+- **Overlay Model** ï¿½ UI objects (TextEditObject, ImageObject, etc.) on top of rendered PDF pages
+- **EditorController** ï¿½ Central API coordinating document, PDF engine, overlays, and undo stack
+- **Command Pattern** ï¿½ All mutations go through Command subclasses for undo/redo support
+- **Qt Signals/Slots** ï¿½ Loose coupling between UI and business logic
 
 ### Building with Translations
 
