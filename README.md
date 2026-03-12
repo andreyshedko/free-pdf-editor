@@ -23,12 +23,32 @@ The C++ application is structured into the following modules:
 
 ### Build & Run (C++)
 
+#### Windows Quick Start (Current Setup)
+
+This machine has Qt MinGW installed (`C:\Qt\6.10.2\mingw_64`) and no MSVC Qt kit.
+Use this flow:
+
+```powershell
+$env:PATH = "C:\Qt\Tools\mingw1310_64\bin;" + $env:PATH
+cmake -B build_mingw -S . -G "MinGW Makefiles" -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe"
+cmake --build build_mingw -j 8
+C:/Qt/6.10.2/mingw_64/bin/windeployqt.exe --release ./build_mingw/src/pdf-editor.exe
+# Optional but recommended for real PDF rendering (instead of placeholder pages):
+# copy .\pdfium.dll .\build_mingw\src\pdfium.dll
+# or set: $env:PDFIUM_DLL = "C:\full\path\to\pdfium.dll"
+./build_mingw/src/pdf-editor.exe
+```
+
 **Prerequisites:**
 - CMake 3.20 or later
 - Qt 6.5+ (with Widgets, Gui, Core modules)
 - C++20 compatible compiler (MSVC, GCC/MinGW, or Clang)
 
 The CMakeLists.txt auto-detects Qt6 on Windows by scanning common install paths (`C:/Qt/*`, environment variables `$QTDIR`, `$QT_DIR`).
+
+On Windows, your compiler and Qt kit must match:
+- MSVC compiler <-> Qt `msvc*` kit (for example, `msvc2022_64`)
+- MinGW compiler <-> Qt `mingw*` kit (for example, `mingw_64`)
 
 #### Linux / macOS
 
@@ -49,11 +69,11 @@ cmake --build build -j$(nproc)
 
 ```powershell
 # Debug build
-cmake -B build -S . -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Debug
+cmake -B build -S . -G "Visual Studio 17 2022"
 cmake --build build --config Debug -j 8
 
 # Release build
-cmake -B build -S . -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -G "Visual Studio 17 2022"
 cmake --build build --config Release -j 8
 
 # Run
@@ -69,23 +89,32 @@ If you have Qt installed with MinGW support (e.g., `C:\Qt\6.10.2\mingw_64`):
 $env:PATH = "C:\Qt\Tools\mingw1310_64\bin;" + $env:PATH
 
 # Debug build
-cmake -B build -S . -G "MinGW Makefiles" `
+cmake -B build_mingw -S . -G "MinGW Makefiles" `
   -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe"
-cmake --build build -j 8
+cmake --build build_mingw -j 8
 
 # Release build (add -DCMAKE_BUILD_TYPE=Release)
-cmake -B build -S . -G "MinGW Makefiles" `
+cmake -B build_mingw -S . -G "MinGW Makefiles" `
   -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe" `
   -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j 8
+cmake --build build_mingw -j 8
+
+# Copy Qt DLLs/plugins beside the executable (recommended once after build)
+C:/Qt/6.10.2/mingw_64/bin/windeployqt.exe --release ./build_mingw/src/pdf-editor.exe
+
+# Optional but recommended for real PDF rendering (instead of placeholder pages):
+# copy .\pdfium.dll .\build_mingw\src\pdfium.dll
+# or set: $env:PDFIUM_DLL = "C:\full\path\to\pdfium.dll"
 
 # Run
-./build/src/pdf-editor.exe
+./build_mingw/src/pdf-editor.exe
 ```
 
-**Note:** The build system auto-detects Qt6 on Windows. If CMake cannot find it, set `Qt6_DIR` manually:
+**Note:** The build system auto-detects Qt6 on Windows. If CMake cannot find it, set `Qt6_DIR` manually to the kit that matches your compiler:
 ```powershell
 -DQt6_DIR="C:/Qt/6.10.2/mingw_64/lib/cmake/Qt6"
+# For MSVC builds, use an MSVC Qt path, for example:
+# -DQt6_DIR="C:/Qt/6.10.2/msvc2022_64/lib/cmake/Qt6"
 ```
 
 ---
@@ -157,7 +186,8 @@ cmake --build build_mingw -j4
 - **CMake 3.20+**
 
 Optional:
-- **PDFium** (for advanced PDF rendering; currently uses QPainter fallback)
+- **PDFium runtime DLL** (`pdfium.dll`) for real PDF rendering on Windows.
+  Without it, the app shows placeholder page previews with a PDFium unavailable message.
 - **Tesseract** (for OCR functionality)
 
 ## License

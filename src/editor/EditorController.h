@@ -45,6 +45,16 @@ public:
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] QImage renderCurrentPage(float zoom) const;
     [[nodiscard]] const document::PageModel* currentPageModel() const;
+    [[nodiscard]] overlay::OverlayObject* currentPageOverlayAt(int index);
+    [[nodiscard]] int currentPageOverlayCount() const;
+
+    bool moveOverlayBy(int index, const QPointF& delta);
+    bool setOverlayRect(int index, const QRectF& rect);
+    bool setTextOverlayText(int index, const QString& text);
+    bool setTextOverlayFontSize(int index, qreal size);
+    bool rotateImageOverlay(int index, bool clockwise = true);
+    bool flipImageOverlay(int index, bool horizontal = true);
+    bool deleteOverlayAt(int index);
 
     [[nodiscard]] QStringList recentFiles() const;
 

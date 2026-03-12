@@ -8,11 +8,60 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
+if(MSVC)
+    add_compile_options(/Zc:__cplusplus)
+endif()
+
+if(WIN32 AND DEFINED Qt6_DIR)
+    string(TOLOWER "${Qt6_DIR}" _qt6_dir_lc)
+    if(MSVC AND _qt6_dir_lc MATCHES "mingw")
+        message(WARNING "Qt6_DIR points to a MinGW Qt kit, but the active compiler is MSVC. Re-detecting a compatible Qt installation.")
+        unset(Qt6_DIR CACHE)
+        unset(Qt6_DIR)
+    elseif(MINGW AND _qt6_dir_lc MATCHES "msvc")
+        message(WARNING "Qt6_DIR points to an MSVC Qt kit, but the active compiler is MinGW. Re-detecting a compatible Qt installation.")
+        unset(Qt6_DIR CACHE)
+        unset(Qt6_DIR)
+    endif()
+endif()
+
 # Help CMake locate Qt6 on Windows without manual cache editing.
 if(WIN32 AND NOT DEFINED Qt6_DIR)
+    set(_qt_arch_suffixes)
+    if(MSVC)
+        list(APPEND _qt_arch_suffixes
+            msvc2022_64 msvc2022
+            msvc2019_64 msvc2019
+            clang_64
+        )
+    elseif(MINGW)
+        list(APPEND _qt_arch_suffixes
+            mingw_64 mingw64
+        )
+    else()
+        list(APPEND _qt_arch_suffixes
+            msvc2022_64 msvc2022
+            msvc2019_64 msvc2019
+            mingw_64 mingw64
+            clang_64
+        )
+    endif()
+
     # 1. Honor explicit environment variables first.
     foreach(_env_root "$ENV{QTDIR}" "$ENV{QT_DIR}" "$ENV{Qt6_DIR}")
         if(_env_root AND EXISTS "${_env_root}/lib/cmake/Qt6/Qt6Config.cmake")
+            set(_is_compatible TRUE)
+            string(TOLOWER "${_env_root}" _env_root_lc)
+            if(MSVC AND _env_root_lc MATCHES "mingw")
+                set(_is_compatible FALSE)
+            elseif(MINGW AND _env_root_lc MATCHES "msvc")
+                set(_is_compatible FALSE)
+            endif()
+
+            if(NOT _is_compatible)
+                continue()
+            endif()
+
             set(Qt6_DIR "${_env_root}/lib/cmake/Qt6" CACHE PATH "Qt6Config.cmake dir" FORCE)
             break()
         endif()
@@ -20,12 +69,6 @@ if(WIN32 AND NOT DEFINED Qt6_DIR)
 
     # 2. Auto-scan C:/Qt/<version>/<arch> for any installed version/arch.
     if(NOT DEFINED Qt6_DIR)
-        set(_qt_arch_suffixes
-            mingw_64 mingw64
-            msvc2022_64 msvc2022
-            msvc2019_64 msvc2019
-            clang_64
-        )
         file(GLOB _qt_version_dirs "C:/Qt/6.*")
         foreach(_vdir IN LISTS _qt_version_dirs)
             if(IS_DIRECTORY "${_vdir}")

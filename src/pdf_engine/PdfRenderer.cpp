@@ -55,7 +55,8 @@ QImage PdfRenderer::renderPage(const document::Document& document, int pageIndex
         painter.drawRect(image.rect().adjusted(1, 1, -2, -2));
         painter.setPen(QColor(120, 120, 120));
         painter.drawText(image.rect(), Qt::AlignCenter,
-            QStringLiteral("Page %1\n(PDFium unavailable)").arg(pageIndex + 1));
+            QStringLiteral("Page %1\n(PDF rendering unavailable)\nInstall pdfium.dll next to the executable\nor set PDFIUM_DLL to its full path.")
+                .arg(pageIndex + 1));
     }
 
     m_cache.put(key, image);

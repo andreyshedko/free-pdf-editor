@@ -215,6 +215,180 @@ const document::PageModel* EditorController::currentPageModel() const {
     return &m_document.page(m_currentPage);
 }
 
+overlay::OverlayObject* EditorController::currentPageOverlayAt(int index) {
+    if (!m_document.isOpen()) {
+        return nullptr;
+    }
+    return m_document.page(m_currentPage).overlayAt(index);
+}
+
+int EditorController::currentPageOverlayCount() const {
+    if (!m_document.isOpen()) {
+        return 0;
+    }
+    return static_cast<int>(m_document.page(m_currentPage).overlayObjects.size());
+}
+
+bool EditorController::moveOverlayBy(int index, const QPointF& delta) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto* obj = m_document.page(m_currentPage).overlayAt(index);
+    if (!obj) {
+        return false;
+    }
+
+    switch (obj->kind()) {
+    case overlay::OverlayObject::Kind::Annotation:
+        static_cast<overlay::AnnotationObject*>(obj)->rect.translate(delta);
+        break;
+    case overlay::OverlayObject::Kind::TextEdit:
+        static_cast<overlay::TextEditObject*>(obj)->rect.translate(delta);
+        break;
+    case overlay::OverlayObject::Kind::ImageEdit:
+        static_cast<overlay::ImageObject*>(obj)->rect.translate(delta);
+        break;
+    case overlay::OverlayObject::Kind::Shape:
+        static_cast<overlay::ShapeObject*>(obj)->rect.translate(delta);
+        break;
+    }
+
+    m_selection.select(m_currentPage, index);
+    emit documentChanged();
+    return true;
+}
+
+bool EditorController::setOverlayRect(int index, const QRectF& rect) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto* obj = m_document.page(m_currentPage).overlayAt(index);
+    if (!obj) {
+        return false;
+    }
+
+    QRectF normalized = rect.normalized();
+    normalized.setWidth(std::max(4.0, normalized.width()));
+    normalized.setHeight(std::max(4.0, normalized.height()));
+
+    switch (obj->kind()) {
+    case overlay::OverlayObject::Kind::Annotation:
+        static_cast<overlay::AnnotationObject*>(obj)->rect = normalized;
+        break;
+    case overlay::OverlayObject::Kind::TextEdit:
+        static_cast<overlay::TextEditObject*>(obj)->rect = normalized;
+        break;
+    case overlay::OverlayObject::Kind::ImageEdit:
+        static_cast<overlay::ImageObject*>(obj)->rect = normalized;
+        break;
+    case overlay::OverlayObject::Kind::Shape:
+        static_cast<overlay::ShapeObject*>(obj)->rect = normalized;
+        break;
+    }
+
+    m_selection.select(m_currentPage, index);
+    emit documentChanged();
+    return true;
+}
+
+bool EditorController::setTextOverlayText(int index, const QString& text) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto* obj = m_document.page(m_currentPage).overlayAt(index);
+    if (!obj || obj->kind() != overlay::OverlayObject::Kind::TextEdit) {
+        return false;
+    }
+
+    static_cast<overlay::TextEditObject*>(obj)->text = text;
+    m_selection.select(m_currentPage, index);
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Text updated"));
+    return true;
+}
+
+bool EditorController::setTextOverlayFontSize(int index, qreal size) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto* obj = m_document.page(m_currentPage).overlayAt(index);
+    if (!obj || obj->kind() != overlay::OverlayObject::Kind::TextEdit) {
+        return false;
+    }
+
+    static_cast<overlay::TextEditObject*>(obj)->fontSize = std::clamp(static_cast<double>(size), 8.0, 144.0);
+    m_selection.select(m_currentPage, index);
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Font size updated"));
+    return true;
+}
+
+bool EditorController::rotateImageOverlay(int index, bool clockwise) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto* obj = m_document.page(m_currentPage).overlayAt(index);
+    if (!obj || obj->kind() != overlay::OverlayObject::Kind::ImageEdit) {
+        return false;
+    }
+
+    auto* imageObj = static_cast<overlay::ImageObject*>(obj);
+    if (imageObj->image.isNull()) {
+        return false;
+    }
+
+    QTransform t;
+    t.rotate(clockwise ? 90.0 : -90.0);
+    imageObj->image = imageObj->image.transformed(t, Qt::SmoothTransformation);
+
+    QRectF r = imageObj->rect;
+    const QPointF c = r.center();
+    r.setSize(QSizeF(r.height(), r.width()));
+    r.moveCenter(c);
+    imageObj->rect = r;
+
+    m_selection.select(m_currentPage, index);
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Image rotated"));
+    return true;
+}
+
+bool EditorController::flipImageOverlay(int index, bool horizontal) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto* obj = m_document.page(m_currentPage).overlayAt(index);
+    if (!obj || obj->kind() != overlay::OverlayObject::Kind::ImageEdit) {
+        return false;
+    }
+
+    auto* imageObj = static_cast<overlay::ImageObject*>(obj);
+    if (imageObj->image.isNull()) {
+        return false;
+    }
+
+    imageObj->image = imageObj->image.mirrored(horizontal, !horizontal);
+    m_selection.select(m_currentPage, index);
+    emit documentChanged();
+    emit statusChanged(horizontal ? QStringLiteral("Image flipped horizontally")
+                                 : QStringLiteral("Image flipped vertically"));
+    return true;
+}
+
+bool EditorController::deleteOverlayAt(int index) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto& page = m_document.page(m_currentPage);
+    if (!page.removeOverlayAt(index)) {
+        return false;
+    }
+    m_selection.clear();
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Overlay deleted"));
+    return true;
+}
+
 QStringList EditorController::recentFiles() const { return m_recentFiles; }
 
 void EditorController::pushRecent(const QString& path) {

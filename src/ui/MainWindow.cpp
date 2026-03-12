@@ -19,6 +19,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPalette>
+#include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
 #include <QWidget>
@@ -155,11 +156,21 @@ void MainWindow::setupActions() {
     // View Menu
     auto* viewMenu = menuBar()->addMenu(tr("&View"));
     auto* zoomInAction = new QAction(tr("Zoom &In"), this);
-    zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    zoomInAction->setShortcuts({
+        QKeySequence::ZoomIn,
+        QKeySequence(QStringLiteral("Ctrl++")),
+        QKeySequence(QStringLiteral("Ctrl+=")),
+        QKeySequence(QStringLiteral("Ctrl+Num++"))
+    });
     viewMenu->addAction(zoomInAction);
 
     auto* zoomOutAction = new QAction(tr("Zoom &Out"), this);
-    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    zoomOutAction->setShortcuts({
+        QKeySequence::ZoomOut,
+        QKeySequence(QStringLiteral("Ctrl+-")),
+        QKeySequence(QStringLiteral("Ctrl+_")),
+        QKeySequence(QStringLiteral("Ctrl+Num+-"))
+    });
     viewMenu->addAction(zoomOutAction);
 
     viewMenu->addSeparator();
@@ -326,8 +337,8 @@ void MainWindow::setupActions() {
         const int hits = m_controller.findInOverlays(query);
         m_statusLabel->setText(tr("Found %1 match(es) on current page").arg(hits));
     });
-    connect(zoomInAction, &QAction::triggered, this, [this]() { m_pageView->setZoom(1.25f); });
-    connect(zoomOutAction, &QAction::triggered, this, [this]() { m_pageView->setZoom(0.8f); });
+    connect(zoomInAction, &QAction::triggered, this, [this]() { m_pageView->setZoom(m_pageView->zoom() * 1.1f); });
+    connect(zoomOutAction, &QAction::triggered, this, [this]() { m_pageView->setZoom(m_pageView->zoom() * 0.9f); });
     connect(insertBlankPageAction, &QAction::triggered, this, [this]() { m_controller.insertBlankPage(); });
 
     // Connect annotation actions
@@ -632,6 +643,29 @@ void MainWindow::setupActions() {
     m_toolbar->addAction(applySignatureAction);
     m_toolbar->addAction(hideTextAction);
     m_toolbar->addAction(ocrAction);
+    m_toolbar->addSeparator();
+    auto* zoomLabel = new QLabel(tr("Zoom"), m_toolbar);
+    m_toolbar->addWidget(zoomLabel);
+    auto* zoomSlider = new QSlider(Qt::Horizontal, m_toolbar);
+    zoomSlider->setRange(25, 400);
+    zoomSlider->setValue(100);
+    zoomSlider->setFixedWidth(140);
+    zoomSlider->setToolTip(tr("Zoom level"));
+    m_toolbar->addWidget(zoomSlider);
+    auto* zoomPercent = new QLabel(QStringLiteral("100%"), m_toolbar);
+    zoomPercent->setMinimumWidth(48);
+    m_toolbar->addWidget(zoomPercent);
+
+    connect(zoomSlider, &QSlider::valueChanged, this, [this](int value) {
+        m_pageView->setZoom(static_cast<float>(value) / 100.0f);
+    });
+    connect(m_pageView, &PageView::zoomChanged, this, [zoomSlider, zoomPercent](float zoom) {
+        const int percent = static_cast<int>(zoom * 100.0f + 0.5f);
+        if (zoomSlider->value() != percent) {
+            zoomSlider->setValue(percent);
+        }
+        zoomPercent->setText(QStringLiteral("%1%").arg(percent));
+    });
 
     rebuildRecentMenu();
 }
