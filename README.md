@@ -164,6 +164,29 @@ The build system automatically:
 2. Embeds `.qm` files as resources in the executable
 3. App loads translations at runtime based on system locale
 
+### Editable Overlay Metadata
+
+When you save a PDF from the editor, the application may also create a sidecar file next to it:
+
+```text
+your-file.fpe.json
+```
+
+This file stores editor-specific metadata required to reopen overlays as editable objects, including:
+- annotations
+- text overlays
+- image overlays
+- shapes
+- object positions and sizes
+
+Without this sidecar file, the PDF can still be opened and viewed, but overlays that were flattened into the saved PDF may no longer be restored as editable objects on reopen.
+
+The UI now distinguishes between two save flows:
+- `Save Editable PDF` / `Save Editable PDF As...` writes the PDF and the editable metadata sidecar, preserving overlay editability on reopen.
+- `Export As -> Flat PDF...` writes only a plain PDF without editable overlay metadata.
+
+When a document is open, the status bar shows whether editable metadata is currently available for that file.
+
 ### Common Tasks
 
 **Run the application:**

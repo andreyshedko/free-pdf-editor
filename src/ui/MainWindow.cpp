@@ -36,10 +36,12 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(&m_controller, &editor::EditorController::documentChanged, this, [this]() {
         refreshPanels();
+        updateEditableStateIndicator();
     });
     connect(&m_controller, &editor::EditorController::pageChanged, this, [this](int page, int count) {
         m_statusLabel->setText(tr("Page %1 / %2").arg(page + 1).arg(count));
         refreshPanels();
+        updateEditableStateIndicator();
     });
     connect(&m_controller, &editor::EditorController::recentFilesChanged, this, [this]() {
         rebuildRecentMenu();
@@ -90,6 +92,10 @@ void MainWindow::setupUi() {
 
     m_statusLabel = new QLabel(tr("Ready"), this);
     statusBar()->addPermanentWidget(m_statusLabel, 1);
+
+    m_editableStateLabel = new QLabel(this);
+    statusBar()->addPermanentWidget(m_editableStateLabel);
+    updateEditableStateIndicator();
 }
 
 void MainWindow::setupActions() {
@@ -104,11 +110,11 @@ void MainWindow::setupActions() {
 
     m_openRecentMenu = fileMenu->addMenu(tr("Open &Recent"));
 
-    auto* saveAction = new QAction(saveIcon, tr("&Save"), this);
+    auto* saveAction = new QAction(saveIcon, tr("&Save Editable PDF"), this);
     saveAction->setShortcut(QKeySequence::Save);
     fileMenu->addAction(saveAction);
 
-    auto* saveAsAction = new QAction(tr("Save &As..."), this);
+    auto* saveAsAction = new QAction(tr("Save Editable PDF &As..."), this);
     saveAsAction->setShortcut(QKeySequence::SaveAs);
     fileMenu->addAction(saveAsAction);
 
@@ -120,8 +126,10 @@ void MainWindow::setupActions() {
     fileMenu->addAction(splitAction);
 
     auto* exportMenu = fileMenu->addMenu(tr("&Export As..."));
+    auto* exportFlatPdfAction = new QAction(tr("Flat PDF..."), this);
     auto* exportAsImagesAction = new QAction(tr("Images..."), this);
     auto* exportAsTextAction = new QAction(tr("Text..."), this);
+        exportMenu->addAction(exportFlatPdfAction);
     exportMenu->addAction(exportAsImagesAction);
     exportMenu->addAction(exportAsTextAction);
 
@@ -298,6 +306,7 @@ void MainWindow::setupActions() {
         const QString path = QFileDialog::getOpenFileName(this, tr("Open PDF"), {}, tr("PDF Files (*.pdf)"));
         if (!path.isEmpty()) {
             m_controller.openDocument(path);
+            updateEditableStateIndicator();
         }
     });
 
@@ -308,17 +317,19 @@ void MainWindow::setupActions() {
         }
         QString target = m_controller.recentFiles().isEmpty() ? QString() : m_controller.recentFiles().first();
         if (target.isEmpty()) {
-            target = QFileDialog::getSaveFileName(this, tr("Save PDF"), {}, tr("PDF Files (*.pdf)"));
+            target = QFileDialog::getSaveFileName(this, tr("Save Editable PDF"), {}, tr("PDF Files (*.pdf)"));
         }
         if (!target.isEmpty()) {
             m_controller.saveDocument(target);
+            updateEditableStateIndicator();
         }
     });
 
     connect(saveAsAction, &QAction::triggered, this, [this]() {
-        const QString path = QFileDialog::getSaveFileName(this, tr("Save PDF"), {}, tr("PDF Files (*.pdf)"));
+        const QString path = QFileDialog::getSaveFileName(this, tr("Save Editable PDF As"), {}, tr("PDF Files (*.pdf)"));
         if (!path.isEmpty()) {
             m_controller.saveDocument(path);
+            updateEditableStateIndicator();
         }
     });
 
@@ -342,11 +353,45 @@ void MainWindow::setupActions() {
     connect(insertBlankPageAction, &QAction::triggered, this, [this]() { m_controller.insertBlankPage(); });
 
     // Connect annotation actions
-    connect(highlightAction, &QAction::triggered, this, [this]() { m_controller.addAnnotation(tr("[Highlight]")); });
+    connect(highlightAction, &QAction::triggered, &m_controller, &editor::EditorController::highlightAnnotation);
     connect(underlineAction, &QAction::triggered, &m_controller, &editor::EditorController::underlineAnnotation);
     connect(strikeoutAction, &QAction::triggered, &m_controller, &editor::EditorController::strikeoutAnnotation);
-    connect(stickyNoteAction, &QAction::triggered, &m_controller, &editor::EditorController::stickyNoteAnnotation);
-    connect(commentAction, &QAction::triggered, &m_controller, &editor::EditorController::commentAnnotation);
+    connect(stickyNoteAction, &QAction::triggered, this, [this]() {
+        bool ok = false;
+        const QString text = QInputDialog::getMultiLineText(
+            this,
+            tr("Sticky Note"),
+            tr("Note text:"),
+            tr("New note"),
+            &ok);
+        if (!ok) {
+            return;
+        }
+        const QString trimmed = text.trimmed();
+        if (trimmed.isEmpty()) {
+            m_statusLabel->setText(tr("Sticky note text cannot be empty"));
+            return;
+        }
+        m_controller.addAnnotation(QStringLiteral("[Sticky Note] %1").arg(trimmed));
+    });
+    connect(commentAction, &QAction::triggered, this, [this]() {
+        bool ok = false;
+        const QString text = QInputDialog::getMultiLineText(
+            this,
+            tr("Comment"),
+            tr("Comment text:"),
+            tr("New comment"),
+            &ok);
+        if (!ok) {
+            return;
+        }
+        const QString trimmed = text.trimmed();
+        if (trimmed.isEmpty()) {
+            m_statusLabel->setText(tr("Comment text cannot be empty"));
+            return;
+        }
+        m_controller.addAnnotation(QStringLiteral("[Comment] %1").arg(trimmed));
+    });
     connect(drawShapeAction, &QAction::triggered, &m_controller, &editor::EditorController::drawShape);
     connect(arrowAction, &QAction::triggered, &m_controller, &editor::EditorController::drawArrow);
 
@@ -588,6 +633,17 @@ void MainWindow::setupActions() {
             m_statusLabel->setText(tr("Exported image: %1").arg(path));
         }
     });
+    connect(exportFlatPdfAction, &QAction::triggered, this, [this]() {
+        if (!m_controller.isOpen()) {
+            m_statusLabel->setText(tr("Open a document first"));
+            return;
+        }
+        const QString path = QFileDialog::getSaveFileName(this, tr("Export Flat PDF"), tr("flat-output.pdf"), tr("PDF Files (*.pdf)"));
+        if (!path.isEmpty()) {
+            m_controller.exportFlattenedPdf(path);
+            updateEditableStateIndicator();
+        }
+    });
     connect(exportAsTextAction, &QAction::triggered, this, [this]() {
         const QString text = m_controller.runOcrOnCurrentPage();
         if (text.isEmpty()) {
@@ -612,7 +668,7 @@ void MainWindow::setupActions() {
         }
         const QString path = QFileDialog::getSaveFileName(this, tr("Print To PDF"), tr("print-output.pdf"), tr("PDF Files (*.pdf)"));
         if (!path.isEmpty()) {
-            m_controller.saveDocument(path);
+            m_controller.exportFlattenedPdf(path);
             m_statusLabel->setText(tr("Print-ready PDF saved: %1").arg(path));
         }
     });
@@ -668,6 +724,29 @@ void MainWindow::setupActions() {
     });
 
     rebuildRecentMenu();
+}
+
+void MainWindow::updateEditableStateIndicator() {
+    if (!m_editableStateLabel) {
+        return;
+    }
+
+    if (!m_controller.isOpen()) {
+        m_editableStateLabel->setText(tr("Editable metadata: no document"));
+        m_editableStateLabel->setToolTip({});
+        return;
+    }
+
+    if (m_controller.hasEditableOverlayMetadata()) {
+        const QString sidecarPath = m_controller.editableOverlayMetadataPath();
+        m_editableStateLabel->setText(tr("Editable metadata: available"));
+        m_editableStateLabel->setToolTip(sidecarPath);
+        return;
+    }
+
+    const QString expectedPath = m_controller.expectedEditableOverlayMetadataPath();
+    m_editableStateLabel->setText(tr("Editable metadata: missing"));
+    m_editableStateLabel->setToolTip(expectedPath);
 }
 
 void MainWindow::rebuildRecentMenu() {

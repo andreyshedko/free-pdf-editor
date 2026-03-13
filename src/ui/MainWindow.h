@@ -23,6 +23,7 @@ private:
     void setupActions();
     void rebuildRecentMenu();
     void refreshPanels();
+    void updateEditableStateIndicator();
 
     editor::EditorController m_controller;
     Toolbar* m_toolbar {nullptr};
@@ -30,5 +31,6 @@ private:
     InspectorPanel* m_properties {nullptr};
     PageView* m_pageView {nullptr};
     QLabel* m_statusLabel {nullptr};
+    QLabel* m_editableStateLabel {nullptr};
     QMenu* m_openRecentMenu {nullptr};
 };

@@ -23,6 +23,7 @@ public:
     bool openDocument(const QString& path);
     bool openRecent(int index);
     bool saveDocument(const QString& path);
+    bool exportFlattenedPdf(const QString& path);
 
     void addAnnotation(const QString& text);
     void addTextEdit(const QString& text);
@@ -43,6 +44,10 @@ public:
     [[nodiscard]] int currentPage() const;
     [[nodiscard]] int pageCount() const;
     [[nodiscard]] bool isOpen() const;
+    [[nodiscard]] QString currentDocumentPath() const;
+    [[nodiscard]] bool hasEditableOverlayMetadata() const;
+    [[nodiscard]] QString editableOverlayMetadataPath() const;
+    [[nodiscard]] QString expectedEditableOverlayMetadataPath() const;
     [[nodiscard]] QImage renderCurrentPage(float zoom) const;
     [[nodiscard]] const document::PageModel* currentPageModel() const;
     [[nodiscard]] overlay::OverlayObject* currentPageOverlayAt(int index);
@@ -51,6 +56,7 @@ public:
     bool moveOverlayBy(int index, const QPointF& delta);
     bool setOverlayRect(int index, const QRectF& rect);
     bool setTextOverlayText(int index, const QString& text);
+    bool setAnnotationOverlayText(int index, const QString& text);
     bool setTextOverlayFontSize(int index, qreal size);
     bool rotateImageOverlay(int index, bool clockwise = true);
     bool flipImageOverlay(int index, bool horizontal = true);
@@ -59,6 +65,7 @@ public:
     [[nodiscard]] QStringList recentFiles() const;
 
         // Advanced feature actions
+        void highlightAnnotation();
         void underlineAnnotation();
         void strikeoutAnnotation();
         void stickyNoteAnnotation();

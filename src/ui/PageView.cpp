@@ -11,6 +11,47 @@
 #include <QPainter>
 #include <QWheelEvent>
 
+namespace {
+
+QString stripAnnotationTag(QString text) {
+    if (text.startsWith('[')) {
+        const int end = text.indexOf(']');
+        if (end > 0) {
+            text = text.mid(end + 1).trimmed();
+        }
+    }
+    return text;
+}
+
+bool hasAnnotationTag(const QString& text, const char* tag) {
+    return text.contains(QString::fromLatin1(tag), Qt::CaseInsensitive);
+}
+
+QString annotationTagPrefix(const QString& text) {
+    if (!text.startsWith('[')) {
+        return {};
+    }
+    const int end = text.indexOf(']');
+    if (end <= 0) {
+        return {};
+    }
+    return text.left(end + 1);
+}
+
+QString composeTaggedAnnotationText(const QString& original, const QString& body) {
+    const QString tag = annotationTagPrefix(original);
+    if (tag.isEmpty()) {
+        return body.trimmed();
+    }
+    const QString trimmed = body.trimmed();
+    if (trimmed.isEmpty()) {
+        return tag;
+    }
+    return QStringLiteral("%1 %2").arg(tag, trimmed);
+}
+
+} // namespace
+
 PageView::PageView(editor::EditorController& controller, QWidget* parent)
     : QWidget(parent), m_controller(controller) {
     setMinimumSize(640, 480);
@@ -18,7 +59,12 @@ PageView::PageView(editor::EditorController& controller, QWidget* parent)
     setFocusPolicy(Qt::StrongFocus);
 
     connect(&m_controller, &editor::EditorController::documentChanged, this, [this]() { update(); });
-    connect(&m_controller, &editor::EditorController::pageChanged, this, [this]() { update(); });
+    connect(&m_controller, &editor::EditorController::pageChanged, this, [this]() {
+        m_pan = {};
+        m_activeOverlay = -1;
+        m_dragMode = DragMode::None;
+        update();
+    });
 }
 
 void PageView::setZoom(float zoom) {
@@ -27,6 +73,7 @@ void PageView::setZoom(float zoom) {
         return;
     }
     m_zoom = clamped;
+    m_pan = clampPanForImageSize(m_lastPageImageSize, m_pan);
     emit zoomChanged(m_zoom);
     update();
 }
@@ -45,7 +92,13 @@ void PageView::paintEvent(QPaintEvent*) {
     }
 
     const QSize targetSize = pageImage.size();
-    const QRect target((width() - targetSize.width()) / 2, (height() - targetSize.height()) / 2, targetSize.width(), targetSize.height());
+    const QPointF clampedPan = clampPanForImageSize(targetSize, m_pan);
+    m_pan = clampedPan;
+    const QRect target(
+        static_cast<int>((width() - targetSize.width()) / 2.0 + clampedPan.x()),
+        static_cast<int>((height() - targetSize.height()) / 2.0 + clampedPan.y()),
+        targetSize.width(),
+        targetSize.height());
     m_lastTarget = target;
     m_lastPageImageSize = pageImage.size();
     painter.drawImage(target, pageImage);
@@ -72,10 +125,64 @@ void PageView::paintEvent(QPaintEvent*) {
         switch (objPtr->kind()) {
         case overlay::OverlayObject::Kind::Annotation: {
             const auto* annotation = static_cast<const overlay::AnnotationObject*>(objPtr.get());
-            painter.setPen(QPen(QColor(220, 48, 48), 2));
-            painter.setBrush(QColor(255, 220, 220, 96));
-            painter.drawRect(annotation->rect);
-            painter.drawText(annotation->rect.adjusted(4, 4, -4, -4), annotation->text);
+            const QString sourceText = annotation->text;
+            const QString bodyText = stripAnnotationTag(sourceText);
+
+            if (hasAnnotationTag(sourceText, "[highlight]")) {
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(255, 235, 59, 135));
+                painter.drawRect(annotation->rect);
+                if (!bodyText.isEmpty()) {
+                    painter.setPen(QColor(60, 60, 60));
+                    painter.drawText(annotation->rect.adjusted(4, 2, -4, -2), Qt::AlignVCenter | Qt::AlignLeft, bodyText);
+                }
+            } else if (hasAnnotationTag(sourceText, "[underline]")) {
+                painter.setPen(QPen(QColor(0, 105, 180), 2));
+                painter.setBrush(QColor(220, 240, 255, 80));
+                painter.drawRect(annotation->rect);
+                painter.setPen(QColor(25, 25, 25));
+                painter.drawText(annotation->rect.adjusted(6, 2, -6, -8), Qt::AlignVCenter | Qt::AlignLeft, bodyText);
+                painter.setPen(QPen(QColor(0, 105, 180), 2));
+                painter.drawLine(annotation->rect.bottomLeft() + QPointF(5, -4), annotation->rect.bottomRight() + QPointF(-5, -4));
+            } else if (hasAnnotationTag(sourceText, "[strikeout]")) {
+                painter.setPen(QPen(QColor(170, 40, 40), 2));
+                painter.setBrush(QColor(255, 228, 228, 90));
+                painter.drawRect(annotation->rect);
+                painter.setPen(QColor(25, 25, 25));
+                painter.drawText(annotation->rect.adjusted(6, 2, -6, -2), Qt::AlignVCenter | Qt::AlignLeft, bodyText);
+                painter.setPen(QPen(QColor(170, 40, 40), 2));
+                const qreal y = annotation->rect.center().y();
+                painter.drawLine(QPointF(annotation->rect.left() + 5, y), QPointF(annotation->rect.right() - 5, y));
+            } else if (hasAnnotationTag(sourceText, "[sticky note]")) {
+                painter.setPen(QPen(QColor(145, 112, 20), 2));
+                painter.setBrush(QColor(255, 244, 176));
+                painter.drawRoundedRect(annotation->rect, 3, 3);
+                const QRectF fold(annotation->rect.right() - 16, annotation->rect.top(), 16, 16);
+                painter.setBrush(QColor(245, 219, 119));
+                painter.drawPolygon(QPolygonF({
+                    QPointF(fold.left(), fold.top()),
+                    QPointF(fold.right(), fold.top()),
+                    QPointF(fold.right(), fold.bottom())
+                }));
+                painter.setPen(QColor(60, 60, 60));
+                painter.drawText(annotation->rect.adjusted(6, 6, -6, -6), Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, bodyText);
+            } else if (hasAnnotationTag(sourceText, "[comment]")) {
+                painter.setPen(QPen(QColor(90, 90, 90), 2));
+                painter.setBrush(QColor(240, 240, 245, 170));
+                painter.drawRoundedRect(annotation->rect, 8, 8);
+                QPolygonF tail;
+                tail << QPointF(annotation->rect.left() + 18, annotation->rect.bottom())
+                     << QPointF(annotation->rect.left() + 30, annotation->rect.bottom())
+                     << QPointF(annotation->rect.left() + 20, annotation->rect.bottom() + 12);
+                painter.drawPolygon(tail);
+                painter.setPen(QColor(35, 35, 35));
+                painter.drawText(annotation->rect.adjusted(8, 6, -8, -8), Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, bodyText);
+            } else {
+                painter.setPen(QPen(QColor(220, 48, 48), 2));
+                painter.setBrush(QColor(255, 220, 220, 96));
+                painter.drawRect(annotation->rect);
+                painter.drawText(annotation->rect.adjusted(4, 4, -4, -4), bodyText.isEmpty() ? sourceText : bodyText);
+            }
             break;
         }
         case overlay::OverlayObject::Kind::TextEdit: {
@@ -126,7 +233,6 @@ void PageView::paintEvent(QPaintEvent*) {
 }
 
 void PageView::wheelEvent(QWheelEvent* event) {
-    const QPointF pagePos = widgetToPage(event->position());
     if (event->modifiers().testFlag(Qt::ControlModifier) && m_activeOverlay >= 0) {
         auto* overlay = m_controller.currentPageOverlayAt(m_activeOverlay);
         if (overlay && overlay->kind() == overlay::OverlayObject::Kind::TextEdit) {
@@ -145,14 +251,16 @@ void PageView::wheelEvent(QWheelEvent* event) {
         return;
     }
 
-    Q_UNUSED(pagePos)
-
-    if (event->angleDelta().y() > 0) {
-        m_controller.previousPage();
-    } else {
-        m_controller.nextPage();
+    const qreal scrollStep = wheelScrollStep(event);
+    const QPointF nextPan = clampPanForImageSize(m_lastPageImageSize, m_pan + QPointF(0.0, scrollStep));
+    if (!qFuzzyCompare(m_pan.y() + 1.0, nextPan.y() + 1.0)) {
+        m_pan = nextPan;
+        update();
+        event->accept();
+        return;
     }
-    event->accept();
+
+    event->ignore();
 }
 
 QRectF PageView::overlayRect(const overlay::OverlayObject* overlay) const {
@@ -212,6 +320,34 @@ int PageView::overlayAtPagePoint(const QPointF& pagePos) const {
     return -1;
 }
 
+QPointF PageView::clampPanForImageSize(const QSize& imageSize, const QPointF& pan) const {
+    if (imageSize.isEmpty()) {
+        return {};
+    }
+
+    const qreal overflowX = std::max(0.0, static_cast<double>(imageSize.width() - width()));
+    const qreal overflowY = std::max(0.0, static_cast<double>(imageSize.height() - height()));
+
+    const qreal minX = -overflowX / 2.0;
+    const qreal maxX = overflowX / 2.0;
+    const qreal minY = -overflowY / 2.0;
+    const qreal maxY = overflowY / 2.0;
+
+    return {
+        std::clamp(pan.x(), minX, maxX),
+        std::clamp(pan.y(), minY, maxY)
+    };
+}
+
+qreal PageView::wheelScrollStep(const QWheelEvent* event) const {
+    if (!event->pixelDelta().isNull()) {
+        return event->pixelDelta().y();
+    }
+
+    constexpr qreal pixelsPerWheelStep = 56.0;
+    return (static_cast<qreal>(event->angleDelta().y()) / 120.0) * pixelsPerWheelStep;
+}
+
 void PageView::openOverlayContextMenu(const QPoint& globalPos, int overlayIndex) {
     auto* selected = m_controller.currentPageOverlayAt(overlayIndex);
     if (!selected) {
@@ -269,8 +405,34 @@ void PageView::openOverlayContextMenu(const QPoint& globalPos, int overlayIndex)
         return;
     }
 
-    if (selected->kind() == overlay::OverlayObject::Kind::Annotation
-        || selected->kind() == overlay::OverlayObject::Kind::Shape) {
+    if (selected->kind() == overlay::OverlayObject::Kind::Annotation) {
+        auto* editAnnotation = menu.addAction(tr("Edit Annotation Text"));
+        auto* deleteOverlay = menu.addAction(tr("Delete Overlay"));
+        auto* chosen = menu.exec(globalPos);
+        auto* annotation = static_cast<overlay::AnnotationObject*>(selected);
+        if (chosen == editAnnotation) {
+            bool ok = false;
+            const QString updatedBody = QInputDialog::getMultiLineText(
+                this,
+                tr("Edit Annotation"),
+                tr("Text:"),
+                stripAnnotationTag(annotation->text),
+                &ok);
+            if (ok) {
+                const QString merged = composeTaggedAnnotationText(annotation->text, updatedBody);
+                m_controller.setAnnotationOverlayText(overlayIndex, merged);
+            }
+            return;
+        }
+        if (chosen == deleteOverlay) {
+            if (m_controller.deleteOverlayAt(overlayIndex)) {
+                m_activeOverlay = -1;
+            }
+        }
+        return;
+    }
+
+    if (selected->kind() == overlay::OverlayObject::Kind::Shape) {
         auto* deleteOverlay = menu.addAction(tr("Delete Overlay"));
         auto* chosen = menu.exec(globalPos);
         if (chosen == deleteOverlay) {
@@ -289,7 +451,7 @@ void PageView::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::RightButton) {
         if (hit >= 0) {
             m_activeOverlay = hit;
-            openOverlayContextMenu(event->globalPos(), hit);
+            openOverlayContextMenu(event->globalPosition().toPoint(), hit);
             update();
             event->accept();
             return;
@@ -298,6 +460,15 @@ void PageView::mousePressEvent(QMouseEvent* event) {
 
     if (event->button() != Qt::LeftButton) {
         QWidget::mousePressEvent(event);
+        return;
+    }
+
+    if (hit < 0 && m_zoom > 1.0f) {
+        m_dragMode = DragMode::Pan;
+        m_lastMousePos = event->pos();
+        m_activeOverlay = -1;
+        update();
+        event->accept();
         return;
     }
 
@@ -320,6 +491,14 @@ void PageView::mousePressEvent(QMouseEvent* event) {
 
 void PageView::mouseMoveEvent(QMouseEvent* event) {
     if (m_activeOverlay < 0 || m_dragMode == DragMode::None || !(event->buttons() & Qt::LeftButton)) {
+        if (m_dragMode == DragMode::Pan && (event->buttons() & Qt::LeftButton)) {
+            const QPoint delta = event->pos() - m_lastMousePos;
+            m_lastMousePos = event->pos();
+            m_pan = clampPanForImageSize(m_lastPageImageSize, m_pan + QPointF(delta.x(), delta.y()));
+            update();
+            event->accept();
+            return;
+        }
         QWidget::mouseMoveEvent(event);
         return;
     }
@@ -362,18 +541,39 @@ void PageView::mouseDoubleClickEvent(QMouseEvent* event) {
     }
 
     auto* overlay = m_controller.currentPageOverlayAt(hit);
-    if (!overlay || overlay->kind() != overlay::OverlayObject::Kind::TextEdit) {
+    if (!overlay) {
         QWidget::mouseDoubleClickEvent(event);
         return;
     }
 
-    auto* textObj = static_cast<overlay::TextEditObject*>(overlay);
-    bool ok = false;
-    const QString updated = QInputDialog::getText(this, tr("Edit Text"), tr("Text:"), QLineEdit::Normal, textObj->text, &ok);
-    if (ok) {
-        m_activeOverlay = hit;
-        m_controller.setTextOverlayText(hit, updated);
+    if (overlay->kind() == overlay::OverlayObject::Kind::TextEdit) {
+        auto* textObj = static_cast<overlay::TextEditObject*>(overlay);
+        bool ok = false;
+        const QString updated = QInputDialog::getText(this, tr("Edit Text"), tr("Text:"), QLineEdit::Normal, textObj->text, &ok);
+        if (ok) {
+            m_activeOverlay = hit;
+            m_controller.setTextOverlayText(hit, updated);
+        }
+        return;
     }
+
+    if (overlay->kind() == overlay::OverlayObject::Kind::Annotation) {
+        auto* annotation = static_cast<overlay::AnnotationObject*>(overlay);
+        bool ok = false;
+        const QString updatedBody = QInputDialog::getMultiLineText(
+            this,
+            tr("Edit Annotation"),
+            tr("Text:"),
+            stripAnnotationTag(annotation->text),
+            &ok);
+        if (ok) {
+            m_activeOverlay = hit;
+            m_controller.setAnnotationOverlayText(hit, composeTaggedAnnotationText(annotation->text, updatedBody));
+        }
+        return;
+    }
+
+    QWidget::mouseDoubleClickEvent(event);
 }
 
 void PageView::keyPressEvent(QKeyEvent* event) {

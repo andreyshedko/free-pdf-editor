@@ -18,6 +18,9 @@ public:
     [[nodiscard]] const QString& path() const;
     [[nodiscard]] const QByteArray& sourceBytes() const;
     [[nodiscard]] const DocumentMetadata& metadata() const;
+    [[nodiscard]] bool hasEditableOverlayMetadata() const;
+    [[nodiscard]] const QString& editableOverlayMetadataPath() const;
+    [[nodiscard]] QString expectedEditableOverlayMetadataPath() const;
 
     [[nodiscard]] int pageCount() const;
     [[nodiscard]] PageModel& page(int index);
@@ -35,6 +38,8 @@ private:
     QByteArray m_sourceBytes;
     std::vector<PageModel> m_pages;
     DocumentMetadata m_metadata;
+    bool m_hasEditableOverlayMetadata {false};
+    QString m_editableOverlayMetadataPath;
 };
 
 } // namespace document

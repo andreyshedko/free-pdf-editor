@@ -18,6 +18,28 @@
 
 namespace editor {
 
+namespace {
+
+QRectF targetTextRect(const document::PageModel& page, const SelectionManager& selection, int currentPage) {
+    if (selection.hasSelection() && selection.pageIndex() == currentPage) {
+        const auto* selected = page.overlayAt(selection.overlayIndex());
+        if (selected && selected->kind() == overlay::OverlayObject::Kind::TextEdit) {
+            return static_cast<const overlay::TextEditObject*>(selected)->rect;
+        }
+    }
+
+    for (const auto& item : page.overlayObjects) {
+        if (!item || item->kind() != overlay::OverlayObject::Kind::TextEdit) {
+            continue;
+        }
+        return static_cast<const overlay::TextEditObject*>(item.get())->rect;
+    }
+
+    return QRectF(120.0, 140.0, 240.0, 56.0);
+}
+
+}
+
 EditorController::EditorController(QObject* parent)
     : QObject(parent) {
     loadRecents();
@@ -53,8 +75,22 @@ bool EditorController::saveDocument(const QString& path) {
         emit statusChanged(QStringLiteral("Failed to save document"));
         return false;
     }
+    if (!m_document.save(path)) {
+        emit statusChanged(QStringLiteral("Saved PDF, but failed to persist editable overlays"));
+        return false;
+    }
     pushRecent(path);
     emit statusChanged(QStringLiteral("Saved: %1").arg(path));
+    return true;
+}
+
+bool EditorController::exportFlattenedPdf(const QString& path) {
+    if (!m_writer.save(m_document, path, m_renderer)) {
+        emit statusChanged(QStringLiteral("Failed to export flattened PDF"));
+        return false;
+    }
+    pushRecent(path);
+    emit statusChanged(QStringLiteral("Flattened PDF exported: %1").arg(path));
     return true;
 }
 
@@ -200,6 +236,10 @@ void EditorController::previousPage() { setCurrentPage(m_currentPage - 1); }
 int EditorController::currentPage() const { return m_currentPage; }
 int EditorController::pageCount() const { return m_document.pageCount(); }
 bool EditorController::isOpen() const { return m_document.isOpen(); }
+QString EditorController::currentDocumentPath() const { return m_document.path(); }
+bool EditorController::hasEditableOverlayMetadata() const { return m_document.hasEditableOverlayMetadata(); }
+QString EditorController::editableOverlayMetadataPath() const { return m_document.editableOverlayMetadataPath(); }
+QString EditorController::expectedEditableOverlayMetadataPath() const { return m_document.expectedEditableOverlayMetadataPath(); }
 
 QImage EditorController::renderCurrentPage(float zoom) const {
     if (!m_document.isOpen()) {
@@ -307,6 +347,22 @@ bool EditorController::setTextOverlayText(int index, const QString& text) {
     return true;
 }
 
+bool EditorController::setAnnotationOverlayText(int index, const QString& text) {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+    auto* obj = m_document.page(m_currentPage).overlayAt(index);
+    if (!obj || obj->kind() != overlay::OverlayObject::Kind::Annotation) {
+        return false;
+    }
+
+    static_cast<overlay::AnnotationObject*>(obj)->text = text;
+    m_selection.select(m_currentPage, index);
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Annotation updated"));
+    return true;
+}
+
 bool EditorController::setTextOverlayFontSize(int index, qreal size) {
     if (!m_document.isOpen()) {
         return false;
@@ -367,7 +423,7 @@ bool EditorController::flipImageOverlay(int index, bool horizontal) {
         return false;
     }
 
-    imageObj->image = imageObj->image.mirrored(horizontal, !horizontal);
+    imageObj->image = imageObj->image.flipped(horizontal ? Qt::Horizontal : Qt::Vertical);
     m_selection.select(m_currentPage, index);
     emit documentChanged();
     emit statusChanged(horizontal ? QStringLiteral("Image flipped horizontally")
@@ -411,12 +467,55 @@ void EditorController::saveRecents() const {
     settings.setValue(QStringLiteral("recentFiles"), m_recentFiles);
 }
 
+void EditorController::highlightAnnotation() {
+    if (!m_document.isOpen()) {
+        emit statusChanged(QStringLiteral("Open a document first"));
+        return;
+    }
+    const QRectF textRect = targetTextRect(m_document.page(m_currentPage), m_selection, m_currentPage);
+    const QRectF highlightRect = textRect.adjusted(-2.0, -2.0, 2.0, 2.0);
+    m_undoStack.execute(std::make_unique<commands::AddAnnotationCommand>(
+        m_document,
+        m_currentPage,
+        QStringLiteral("[Highlight]"),
+        highlightRect));
+    selectLastOverlay();
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Highlight annotation added"));
+}
+
 void EditorController::underlineAnnotation() {
-    addAnnotation(QStringLiteral("[Underline]"));
+    if (!m_document.isOpen()) {
+        emit statusChanged(QStringLiteral("Open a document first"));
+        return;
+    }
+    const QRectF textRect = targetTextRect(m_document.page(m_currentPage), m_selection, m_currentPage);
+    const QRectF underlineRect(textRect.left(), textRect.bottom() - 8.0, textRect.width(), 14.0);
+    m_undoStack.execute(std::make_unique<commands::AddAnnotationCommand>(
+        m_document,
+        m_currentPage,
+        QStringLiteral("[Underline] %1").arg(QStringLiteral("Text")),
+        underlineRect));
+    selectLastOverlay();
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Underline annotation added"));
 }
 
 void EditorController::strikeoutAnnotation() {
-    addAnnotation(QStringLiteral("[Strikeout]"));
+    if (!m_document.isOpen()) {
+        emit statusChanged(QStringLiteral("Open a document first"));
+        return;
+    }
+    const QRectF textRect = targetTextRect(m_document.page(m_currentPage), m_selection, m_currentPage);
+    const QRectF strikeRect(textRect.left(), textRect.center().y() - 7.0, textRect.width(), 14.0);
+    m_undoStack.execute(std::make_unique<commands::AddAnnotationCommand>(
+        m_document,
+        m_currentPage,
+        QStringLiteral("[Strikeout] %1").arg(QStringLiteral("Text")),
+        strikeRect));
+    selectLastOverlay();
+    emit documentChanged();
+    emit statusChanged(QStringLiteral("Strikeout annotation added"));
 }
 
 void EditorController::stickyNoteAnnotation() {

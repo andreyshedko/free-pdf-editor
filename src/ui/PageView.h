@@ -32,13 +32,16 @@ private:
     enum class DragMode {
         None,
         Move,
-        Resize
+        Resize,
+        Pan
     };
 
     [[nodiscard]] QRectF overlayRect(const overlay::OverlayObject* overlay) const;
     [[nodiscard]] QPointF widgetToPage(const QPointF& pos) const;
     [[nodiscard]] bool isPointOnResizeHandle(const QPointF& pagePos, const QRectF& rect) const;
     [[nodiscard]] int overlayAtPagePoint(const QPointF& pagePos) const;
+    [[nodiscard]] QPointF clampPanForImageSize(const QSize& imageSize, const QPointF& pan) const;
+    [[nodiscard]] qreal wheelScrollStep(const QWheelEvent* event) const;
     void openOverlayContextMenu(const QPoint& globalPos, int overlayIndex);
 
     editor::EditorController& m_controller;
@@ -49,4 +52,6 @@ private:
     DragMode m_dragMode {DragMode::None};
     QPointF m_dragStartPage;
     QRectF m_dragStartRect;
+    QPoint m_lastMousePos;
+    QPointF m_pan;
 };
