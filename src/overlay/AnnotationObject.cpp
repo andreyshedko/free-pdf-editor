@@ -13,6 +13,7 @@ std::unique_ptr<OverlayObject> TextEditObject::clone() const {
     auto out = std::make_unique<TextEditObject>();
     out->rect = rect;
     out->text = text;
+    out->fontFamily = fontFamily;
     out->fontSize = fontSize;
     return out;
 }

@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QFile>
 #include <QFileDialog>
+#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -19,6 +20,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPalette>
+#include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
@@ -212,7 +214,6 @@ void MainWindow::setupActions() {
     auto* stickyNoteAction = new QAction(tr("Sticky Note"), this);
     auto* commentAction = new QAction(tr("Comment"), this);
     auto* addAnnotAction = new QAction(tr("Add Note"), this);
-    auto* drawShapeAction = new QAction(tr("Draw Shape"), this);
     auto* arrowAction = new QAction(tr("Arrow"), this);
     annotationsMenu->addAction(highlightAction);
     annotationsMenu->addAction(underlineAction);
@@ -220,7 +221,6 @@ void MainWindow::setupActions() {
     annotationsMenu->addAction(stickyNoteAction);
     annotationsMenu->addAction(commentAction);
     annotationsMenu->addAction(addAnnotAction);
-    annotationsMenu->addAction(drawShapeAction);
     annotationsMenu->addAction(arrowAction);
 
     auto* textImageMenu = toolsMenu->addMenu(tr("&Text && Images"));
@@ -392,7 +392,6 @@ void MainWindow::setupActions() {
         }
         m_controller.addAnnotation(QStringLiteral("[Comment] %1").arg(trimmed));
     });
-    connect(drawShapeAction, &QAction::triggered, &m_controller, &editor::EditorController::drawShape);
     connect(arrowAction, &QAction::triggered, &m_controller, &editor::EditorController::drawArrow);
 
     connect(addAnnotAction, &QAction::triggered, this, [this]() {
@@ -433,17 +432,46 @@ void MainWindow::setupActions() {
         }
     });
     connect(changeFontAction, &QAction::triggered, this, [this]() {
+        QFontDatabase fontDb;
+        QStringList families = fontDb.families();
+        families.removeDuplicates();
+        std::sort(families.begin(), families.end(), [](const QString& a, const QString& b) {
+            return a.compare(b, Qt::CaseInsensitive) < 0;
+        });
+        if (families.isEmpty()) {
+            m_statusLabel->setText(tr("No fonts available"));
+            return;
+        }
+
+        QSettings settings(QStringLiteral("FreePdfEditor"), QStringLiteral("DesktopCpp"));
+        const QString lastFont = settings.value(QStringLiteral("ui/lastFontFamily")).toString().trimmed();
+        int initialIndex = 0;
+        if (!lastFont.isEmpty()) {
+            for (int i = 0; i < families.size(); ++i) {
+                if (families.at(i).compare(lastFont, Qt::CaseInsensitive) == 0) {
+                    initialIndex = i;
+                    break;
+                }
+            }
+        }
+
         bool ok = false;
-        const QString font = QInputDialog::getText(this, tr("Change Font"), tr("Font tag (e.g. Helvetica):"), QLineEdit::Normal, tr("Helvetica"), &ok);
+        const QString font = QInputDialog::getItem(this, tr("Change Font"), tr("Font family:"), families, initialIndex, false, &ok);
         if (ok && !font.isEmpty()) {
             m_controller.setTextFontTag(font);
+            settings.setValue(QStringLiteral("ui/lastFontFamily"), font);
         }
     });
     connect(changeFontSizeAction, &QAction::triggered, this, [this]() {
+        QSettings settings(QStringLiteral("FreePdfEditor"), QStringLiteral("DesktopCpp"));
+        const double lastSize = settings.value(QStringLiteral("ui/lastFontSize"), 14.0).toDouble();
+        const double initialSize = std::clamp(lastSize, 8.0, 72.0);
+
         bool ok = false;
-        const double size = QInputDialog::getDouble(this, tr("Change Font Size"), tr("Font size:"), 14.0, 8.0, 72.0, 1, &ok);
+        const double size = QInputDialog::getDouble(this, tr("Change Font Size"), tr("Font size:"), initialSize, 8.0, 72.0, 1, &ok);
         if (ok) {
             m_controller.setTextFontSize(size);
+            settings.setValue(QStringLiteral("ui/lastFontSize"), size);
         }
     });
     connect(moveTextBlockAction, &QAction::triggered, this, [this]() {
@@ -508,7 +536,9 @@ void MainWindow::setupActions() {
 
     connect(ocrAction, &QAction::triggered, this, [this]() {
         const QString text = m_controller.runOcrOnCurrentPage();
-        m_statusLabel->setText(text.left(240));
+        if (!text.isEmpty()) {
+            m_statusLabel->setText(text.left(240));
+        }
     });
 
     connect(mergeAction, &QAction::triggered, this, [this]() {
@@ -694,7 +724,6 @@ void MainWindow::setupActions() {
     m_toolbar->addAction(addTextAction);
     m_toolbar->addAction(addImageAction);
     m_toolbar->addSeparator();
-    m_toolbar->addAction(drawShapeAction);
     m_toolbar->addAction(createFormFieldAction);
     m_toolbar->addAction(applySignatureAction);
     m_toolbar->addAction(hideTextAction);

@@ -70,7 +70,6 @@ public:
         void strikeoutAnnotation();
         void stickyNoteAnnotation();
         void commentAnnotation();
-        void drawShape();
         void drawArrow();
         void editText();
         void changeFont();

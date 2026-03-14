@@ -34,6 +34,7 @@ class TextEditObject final : public OverlayObject {
 public:
     QRectF rect;
     QString text;
+    QString fontFamily;
     qreal fontSize {12.0};
 
     Kind kind() const override { return Kind::TextEdit; }

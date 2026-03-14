@@ -212,6 +212,13 @@ Optional:
 - **PDFium runtime DLL** (`pdfium.dll`) for real PDF rendering on Windows.
   Without it, the app shows placeholder page previews with a PDFium unavailable message.
 - **Tesseract** (for OCR functionality)
+  - If OCR says that Tesseract is not found, install Tesseract and ensure `tesseract.exe` is available.
+  - The app auto-detects common Windows install paths and `PATH`.
+  - You can also set an explicit path:
+
+```powershell
+$env:TESSERACT_EXE = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+```
 
 ## License
 

@@ -11,6 +11,11 @@
 
 namespace {
 
+struct ArrowStyle {
+    QColor color {180, 80, 20};
+    qreal width {3.0};
+};
+
 QString stripAnnotationTag(QString text) {
     if (text.startsWith('[')) {
         const int end = text.indexOf(']');
@@ -23,6 +28,52 @@ QString stripAnnotationTag(QString text) {
 
 bool hasAnnotationTag(const QString& text, const char* tag) {
     return text.contains(QString::fromLatin1(tag), Qt::CaseInsensitive);
+}
+
+bool isArrowAnnotation(const QString& text) {
+    if (!text.startsWith('[')) {
+        return false;
+    }
+    const int end = text.indexOf(']');
+    if (end <= 0) {
+        return false;
+    }
+    const QString inside = text.mid(1, end - 1);
+    const QString head = inside.section(';', 0, 0).trimmed();
+    return head.compare(QStringLiteral("Arrow"), Qt::CaseInsensitive) == 0;
+}
+
+ArrowStyle parseArrowStyle(const QString& text) {
+    ArrowStyle style;
+    if (!isArrowAnnotation(text)) {
+        return style;
+    }
+
+    const int end = text.indexOf(']');
+    const QString inside = text.mid(1, end - 1);
+    const QStringList parts = inside.split(';', Qt::SkipEmptyParts);
+    for (int i = 1; i < parts.size(); ++i) {
+        const QString part = parts.at(i).trimmed();
+        const int eq = part.indexOf('=');
+        if (eq <= 0) {
+            continue;
+        }
+        const QString key = part.left(eq).trimmed().toLower();
+        const QString value = part.mid(eq + 1).trimmed();
+        if (key == QStringLiteral("color")) {
+            const QColor parsed(value);
+            if (parsed.isValid()) {
+                style.color = parsed;
+            }
+        } else if (key == QStringLiteral("width")) {
+            bool ok = false;
+            const qreal w = value.toDouble(&ok);
+            if (ok) {
+                style.width = std::clamp(w, 1.0, 12.0);
+            }
+        }
+    }
+    return style;
 }
 
 void drawOverlays(QPainter& painter, const document::PageModel& page) {
@@ -86,6 +137,21 @@ void drawOverlays(QPainter& painter, const document::PageModel& page) {
                 painter.drawPolygon(tail);
                 painter.setPen(QColor(35, 35, 35));
                 painter.drawText(a->rect.adjusted(8, 6, -8, -8), Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, bodyText);
+            } else if (isArrowAnnotation(sourceText)) {
+                const ArrowStyle style = parseArrowStyle(sourceText);
+                const QPointF start(a->rect.left(), a->rect.center().y());
+                const QPointF end(a->rect.right(), a->rect.center().y());
+                painter.setPen(QPen(style.color, style.width));
+                painter.setBrush(style.color);
+                painter.drawLine(start, end);
+
+                const qreal headLen = std::min(18.0, std::max(10.0, a->rect.width() * 0.18));
+                const qreal headHalf = std::max(5.0, a->rect.height() * 0.22 + style.width * 0.5);
+                QPolygonF head;
+                head << end
+                     << QPointF(end.x() - headLen, end.y() - headHalf)
+                     << QPointF(end.x() - headLen, end.y() + headHalf);
+                painter.drawPolygon(head);
             } else {
                 painter.setPen(QPen(QColor(220, 48, 48), 2));
                 painter.setBrush(QColor(255, 220, 220, 96));
@@ -100,6 +166,9 @@ void drawOverlays(QPainter& painter, const document::PageModel& page) {
             painter.setBrush(QColor(220, 230, 255, 90));
             painter.drawRoundedRect(t->rect, 4, 4);
             auto f = painter.font();
+            if (!t->fontFamily.trimmed().isEmpty()) {
+                f.setFamily(t->fontFamily);
+            }
             f.setPointSizeF(t->fontSize);
             painter.setFont(f);
             painter.drawText(t->rect.adjusted(6, 4, -6, -4), t->text);

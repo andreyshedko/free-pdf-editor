@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 
 #include <algorithm>
 
@@ -54,6 +55,26 @@ QRectF rectFromJson(const QJsonObject& obj) {
         obj.value(QStringLiteral("h")).toDouble());
 }
 
+struct LegacyFontParse {
+    QString fontFamily;
+    QString text;
+};
+
+LegacyFontParse parseLegacyTextFontTag(const QString& rawText) {
+    static const QRegularExpression pattern(QStringLiteral("^\\[([^\\]\\n]{1,80})\\]\\s+(.+)$"));
+    const QRegularExpressionMatch match = pattern.match(rawText);
+    if (!match.hasMatch()) {
+        return {QString{}, rawText};
+    }
+
+    const QString tag = match.captured(1).trimmed();
+    const QString text = match.captured(2);
+    if (tag.isEmpty() || tag.contains('=') || tag.contains(';') || !tag.contains(QRegularExpression(QStringLiteral("[A-Za-z]")))) {
+        return {QString{}, rawText};
+    }
+    return {tag, text};
+}
+
 QJsonObject overlayToJson(const overlay::OverlayObject& overlayObject) {
     QJsonObject obj;
     switch (overlayObject.kind()) {
@@ -69,6 +90,7 @@ QJsonObject overlayToJson(const overlay::OverlayObject& overlayObject) {
         obj[QStringLiteral("kind")] = QStringLiteral("text");
         obj[QStringLiteral("rect")] = rectToJson(textEdit.rect);
         obj[QStringLiteral("text")] = textEdit.text;
+        obj[QStringLiteral("fontFamily")] = textEdit.fontFamily;
         obj[QStringLiteral("fontSize")] = textEdit.fontSize;
         break;
     }
@@ -107,6 +129,14 @@ std::unique_ptr<overlay::OverlayObject> overlayFromJson(const QJsonObject& obj) 
         auto out = std::make_unique<overlay::TextEditObject>();
         out->rect = rect;
         out->text = obj.value(QStringLiteral("text")).toString();
+        out->fontFamily = obj.value(QStringLiteral("fontFamily")).toString();
+        if (out->fontFamily.isEmpty()) {
+            const LegacyFontParse parsed = parseLegacyTextFontTag(out->text);
+            if (!parsed.fontFamily.isEmpty()) {
+                out->fontFamily = parsed.fontFamily;
+                out->text = parsed.text;
+            }
+        }
         out->fontSize = obj.value(QStringLiteral("fontSize")).toDouble(12.0);
         return out;
     }

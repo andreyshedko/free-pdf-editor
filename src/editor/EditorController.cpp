@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QPainter>
 #include <QImageReader>
+#include <QRegularExpression>
 #include <QSettings>
 
 namespace editor {
@@ -36,6 +37,20 @@ QRectF targetTextRect(const document::PageModel& page, const SelectionManager& s
     }
 
     return QRectF(120.0, 140.0, 240.0, 56.0);
+}
+
+QString stripLegacyTextFontTag(const QString& rawText) {
+    static const QRegularExpression pattern(QStringLiteral("^\\[([^\\]\\n]{1,80})\\]\\s+(.+)$"));
+    const QRegularExpressionMatch match = pattern.match(rawText);
+    if (!match.hasMatch()) {
+        return rawText;
+    }
+
+    const QString tag = match.captured(1).trimmed();
+    if (tag.isEmpty() || tag.contains('=') || tag.contains(';') || !tag.contains(QRegularExpression(QStringLiteral("[A-Za-z]")))) {
+        return rawText;
+    }
+    return match.captured(2);
 }
 
 }
@@ -198,11 +213,30 @@ bool EditorController::selectLastOverlay() {
 }
 
 QString EditorController::runOcrOnCurrentPage() {
+    QString availability;
+    if (!m_ocr.isAvailable(&availability)) {
+        emit statusChanged(availability);
+        return {};
+    }
+
     const QImage img = renderCurrentPage(1.0f);
     if (img.isNull()) {
-        return QStringLiteral("No page");
+        emit statusChanged(QStringLiteral("No page for OCR"));
+        return {};
     }
-    const QString text = m_ocr.recognize(img);
+
+    QString ocrError;
+    const QString text = m_ocr.recognize(img, QStringLiteral("eng"), &ocrError);
+    if (!ocrError.isEmpty()) {
+        emit statusChanged(QStringLiteral("OCR failed: %1").arg(ocrError));
+        return {};
+    }
+
+    if (text.trimmed().isEmpty()) {
+        emit statusChanged(QStringLiteral("OCR done: no text detected"));
+        return {};
+    }
+
     emit statusChanged(QStringLiteral("OCR done"));
     return text;
 }
@@ -526,27 +560,15 @@ void EditorController::commentAnnotation() {
     addAnnotation(QStringLiteral("[Comment]"));
 }
 
-void EditorController::drawShape() {
-    if (!m_document.isOpen()) {
-        emit statusChanged(QStringLiteral("Open a document first"));
-        return;
-    }
-    auto shape = std::make_unique<overlay::ShapeObject>();
-    shape->rect = QRectF(120.0, 120.0, 180.0, 100.0);
-    const int index = m_document.page(m_currentPage).addOverlay(std::move(shape));
-    m_selection.select(m_currentPage, index);
-    emit documentChanged();
-    emit statusChanged(QStringLiteral("Shape added"));
-}
-
 void EditorController::drawArrow() {
     if (!m_document.isOpen()) {
         emit statusChanged(QStringLiteral("Open a document first"));
         return;
     }
-    auto shape = std::make_unique<overlay::ShapeObject>();
-    shape->rect = QRectF(120.0, 260.0, 220.0, 12.0);
-    const int index = m_document.page(m_currentPage).addOverlay(std::move(shape));
+    auto annotation = std::make_unique<overlay::AnnotationObject>();
+    annotation->text = QStringLiteral("[Arrow;color=#b45014;width=3.0]");
+    annotation->rect = QRectF(120.0, 260.0, 220.0, 48.0);
+    const int index = m_document.page(m_currentPage).addOverlay(std::move(annotation));
     m_selection.select(m_currentPage, index);
     emit documentChanged();
     emit statusChanged(QStringLiteral("Arrow added"));
@@ -578,12 +600,32 @@ bool EditorController::setTextFontTag(const QString& fontTag) {
         emit statusChanged(QStringLiteral("Open a document first"));
         return false;
     }
+    const QString normalizedFont = fontTag.trimmed();
+    if (normalizedFont.isEmpty()) {
+        emit statusChanged(QStringLiteral("Invalid font name"));
+        return false;
+    }
+
     auto& page = m_document.page(m_currentPage);
+
+    if (m_selection.hasSelection() && m_selection.pageIndex() == m_currentPage) {
+        auto* selected = page.overlayAt(m_selection.overlayIndex());
+        if (selected && selected->kind() == overlay::OverlayObject::Kind::TextEdit) {
+            auto* textObj = static_cast<overlay::TextEditObject*>(selected);
+            textObj->text = stripLegacyTextFontTag(textObj->text);
+            textObj->fontFamily = normalizedFont;
+            emit documentChanged();
+            emit statusChanged(QStringLiteral("Font updated"));
+            return true;
+        }
+    }
+
     for (int i = 0; i < static_cast<int>(page.overlayObjects.size()); ++i) {
         auto* obj = page.overlayAt(i);
         if (obj && obj->kind() == overlay::OverlayObject::Kind::TextEdit) {
             auto* textObj = static_cast<overlay::TextEditObject*>(obj);
-            textObj->text = QStringLiteral("[%1] %2").arg(fontTag, textObj->text);
+            textObj->text = stripLegacyTextFontTag(textObj->text);
+            textObj->fontFamily = normalizedFont;
             m_selection.select(m_currentPage, i);
             emit documentChanged();
             emit statusChanged(QStringLiteral("Font updated"));

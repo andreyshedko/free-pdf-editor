@@ -4,14 +4,24 @@
 
 #include <algorithm>
 #include <QInputDialog>
+#include <QHBoxLayout>
+#include <QColorDialog>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QSlider>
+#include <QWidgetAction>
 #include <QWheelEvent>
 
 namespace {
+
+struct ArrowStyle {
+    QColor color {180, 80, 20};
+    qreal width {3.0};
+};
 
 QString stripAnnotationTag(QString text) {
     if (text.startsWith('[')) {
@@ -25,6 +35,64 @@ QString stripAnnotationTag(QString text) {
 
 bool hasAnnotationTag(const QString& text, const char* tag) {
     return text.contains(QString::fromLatin1(tag), Qt::CaseInsensitive);
+}
+
+bool isArrowAnnotation(const QString& text) {
+    if (!text.startsWith('[')) {
+        return false;
+    }
+    const int end = text.indexOf(']');
+    if (end <= 0) {
+        return false;
+    }
+    const QString inside = text.mid(1, end - 1);
+    const QString head = inside.section(';', 0, 0).trimmed();
+    return head.compare(QStringLiteral("Arrow"), Qt::CaseInsensitive) == 0;
+}
+
+ArrowStyle parseArrowStyle(const QString& text) {
+    ArrowStyle style;
+    if (!isArrowAnnotation(text)) {
+        return style;
+    }
+
+    const int end = text.indexOf(']');
+    const QString inside = text.mid(1, end - 1);
+    const QStringList parts = inside.split(';', Qt::SkipEmptyParts);
+    for (int i = 1; i < parts.size(); ++i) {
+        const QString part = parts.at(i).trimmed();
+        const int eq = part.indexOf('=');
+        if (eq <= 0) {
+            continue;
+        }
+        const QString key = part.left(eq).trimmed().toLower();
+        const QString value = part.mid(eq + 1).trimmed();
+        if (key == QStringLiteral("color")) {
+            const QColor parsed(value);
+            if (parsed.isValid()) {
+                style.color = parsed;
+            }
+        } else if (key == QStringLiteral("width")) {
+            bool ok = false;
+            const qreal w = value.toDouble(&ok);
+            if (ok) {
+                style.width = std::clamp(w, 1.0, 12.0);
+            }
+        }
+    }
+    return style;
+}
+
+QString composeArrowTag(const QString& original, const ArrowStyle& style) {
+    const int end = original.indexOf(']');
+    const QString body = end > 0 ? original.mid(end + 1).trimmed() : QString{};
+    const QString tag = QStringLiteral("[Arrow;color=%1;width=%2]")
+        .arg(style.color.name(QColor::HexRgb))
+        .arg(QString::number(style.width, 'f', 1));
+    if (body.isEmpty()) {
+        return tag;
+    }
+    return QStringLiteral("%1 %2").arg(tag, body);
 }
 
 QString annotationTagPrefix(const QString& text) {
@@ -177,6 +245,21 @@ void PageView::paintEvent(QPaintEvent*) {
                 painter.drawPolygon(tail);
                 painter.setPen(QColor(35, 35, 35));
                 painter.drawText(annotation->rect.adjusted(8, 6, -8, -8), Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, bodyText);
+            } else if (isArrowAnnotation(sourceText)) {
+                const ArrowStyle style = parseArrowStyle(sourceText);
+                const QPointF start(annotation->rect.left(), annotation->rect.center().y());
+                const QPointF end(annotation->rect.right(), annotation->rect.center().y());
+                painter.setPen(QPen(style.color, style.width));
+                painter.setBrush(style.color);
+                painter.drawLine(start, end);
+
+                const qreal headLen = std::min(18.0, std::max(10.0, annotation->rect.width() * 0.18));
+                const qreal headHalf = std::max(5.0, annotation->rect.height() * 0.22 + style.width * 0.5);
+                QPolygonF head;
+                head << end
+                     << QPointF(end.x() - headLen, end.y() - headHalf)
+                     << QPointF(end.x() - headLen, end.y() + headHalf);
+                painter.drawPolygon(head);
             } else {
                 painter.setPen(QPen(QColor(220, 48, 48), 2));
                 painter.setBrush(QColor(255, 220, 220, 96));
@@ -191,6 +274,9 @@ void PageView::paintEvent(QPaintEvent*) {
             painter.setBrush(QColor(220, 230, 255, 90));
             painter.drawRoundedRect(textEdit->rect, 4, 4);
             auto font = painter.font();
+            if (!textEdit->fontFamily.trimmed().isEmpty()) {
+                font.setFamily(textEdit->fontFamily);
+            }
             font.setPointSizeF(textEdit->fontSize);
             painter.setFont(font);
             painter.drawText(textEdit->rect.adjusted(6, 4, -6, -4), textEdit->text);
@@ -406,10 +492,64 @@ void PageView::openOverlayContextMenu(const QPoint& globalPos, int overlayIndex)
     }
 
     if (selected->kind() == overlay::OverlayObject::Kind::Annotation) {
-        auto* editAnnotation = menu.addAction(tr("Edit Annotation Text"));
+        auto* annotation = static_cast<overlay::AnnotationObject*>(selected);
+        const bool isArrow = isArrowAnnotation(annotation->text);
+        const QString baseArrowText = annotation->text;
+
+        QAction* pickColor = nullptr;
+        QAction* editAnnotation = nullptr;
+
+        ArrowStyle style;
+        if (isArrow) {
+            style = parseArrowStyle(annotation->text);
+
+            auto* thicknessWidget = new QWidget(&menu);
+            auto* thicknessLayout = new QHBoxLayout(thicknessWidget);
+            thicknessLayout->setContentsMargins(8, 4, 8, 4);
+            thicknessLayout->setSpacing(8);
+
+            auto* thicknessLabel = new QLabel(tr("Arrow Thickness"), thicknessWidget);
+            auto* thicknessSlider = new QSlider(Qt::Horizontal, thicknessWidget);
+            thicknessSlider->setRange(1, 12);
+            thicknessSlider->setValue(static_cast<int>(std::round(style.width)));
+            thicknessSlider->setFixedWidth(130);
+
+            auto* thicknessValueLabel = new QLabel(QString::number(static_cast<int>(std::round(style.width))), thicknessWidget);
+            thicknessValueLabel->setMinimumWidth(20);
+
+            thicknessLayout->addWidget(thicknessLabel);
+            thicknessLayout->addWidget(thicknessSlider);
+            thicknessLayout->addWidget(thicknessValueLabel);
+
+            auto* thicknessAction = new QWidgetAction(&menu);
+            thicknessAction->setDefaultWidget(thicknessWidget);
+            menu.addAction(thicknessAction);
+
+            connect(thicknessSlider, &QSlider::valueChanged, &menu, [&, thicknessValueLabel](int value) {
+                style.width = static_cast<qreal>(value);
+                thicknessValueLabel->setText(QString::number(value));
+                m_controller.setAnnotationOverlayText(overlayIndex, composeArrowTag(baseArrowText, style));
+            });
+
+            menu.addSeparator();
+            pickColor = menu.addAction(tr("Arrow Color..."));
+            menu.addSeparator();
+        }
+
+        editAnnotation = menu.addAction(tr("Edit Annotation Text"));
         auto* deleteOverlay = menu.addAction(tr("Delete Overlay"));
         auto* chosen = menu.exec(globalPos);
-        auto* annotation = static_cast<overlay::AnnotationObject*>(selected);
+
+        if (isArrow && chosen == pickColor) {
+            const QColor chosenColor = QColorDialog::getColor(style.color, this, tr("Arrow Color"));
+            if (!chosenColor.isValid()) {
+                return;
+            }
+            style.color = chosenColor;
+            m_controller.setAnnotationOverlayText(overlayIndex, composeArrowTag(baseArrowText, style));
+            return;
+        }
+
         if (chosen == editAnnotation) {
             bool ok = false;
             const QString updatedBody = QInputDialog::getMultiLineText(
