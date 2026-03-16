@@ -22,6 +22,7 @@ public:
 
     bool openDocument(const QString& path);
     bool openRecent(int index);
+    bool closeDocument();
     bool saveDocument(const QString& path);
     bool exportFlattenedPdf(const QString& path);
 

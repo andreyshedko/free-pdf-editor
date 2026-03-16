@@ -120,6 +120,10 @@ void MainWindow::setupActions() {
     saveAsAction->setShortcut(QKeySequence::SaveAs);
     fileMenu->addAction(saveAsAction);
 
+    auto* closeAction = new QAction(tr("&Close"), this);
+    closeAction->setShortcut(QKeySequence::Close);
+    fileMenu->addAction(closeAction);
+
     fileMenu->addSeparator();
 
     auto* mergeAction = new QAction(tr("&Merge PDFs..."), this);
@@ -330,6 +334,12 @@ void MainWindow::setupActions() {
         if (!path.isEmpty()) {
             m_controller.saveDocument(path);
             updateEditableStateIndicator();
+        }
+    });
+
+    connect(closeAction, &QAction::triggered, this, [this]() {
+        if (!m_controller.closeDocument()) {
+            m_statusLabel->setText(tr("No document open"));
         }
     });
 

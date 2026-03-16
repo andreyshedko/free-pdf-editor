@@ -85,6 +85,23 @@ bool EditorController::openRecent(int index) {
     return openDocument(m_recentFiles[index]);
 }
 
+bool EditorController::closeDocument() {
+    if (!m_document.isOpen()) {
+        return false;
+    }
+
+    m_document.reset();
+    m_renderer.open(m_document);
+    m_undoStack.clear();
+    m_selection.clear();
+    m_currentPage = 0;
+
+    emit documentChanged();
+    emit pageChanged(m_currentPage, m_document.pageCount());
+    emit statusChanged(QStringLiteral("Closed document"));
+    return true;
+}
+
 bool EditorController::saveDocument(const QString& path) {
     if (!m_writer.save(m_document, path, m_renderer)) {
         emit statusChanged(QStringLiteral("Failed to save document"));
