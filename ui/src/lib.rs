@@ -9,6 +9,7 @@
 
 slint::include_modules!();
 
+use dark_light::Mode;
 use shared::{Command, Event};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 use std::sync::mpsc::Sender;
@@ -23,6 +24,9 @@ impl AppController {
     /// Create the main window and wire all callbacks to `cmd_tx`.
     pub fn new(cmd_tx: Sender<Command>) -> Result<Self, slint::PlatformError> {
         let window = AppWindow::new()?;
+
+        let system_dark = matches!(dark_light::detect(), Mode::Dark);
+        window.set_dark_theme(system_dark);
 
         let tx = cmd_tx.clone();
         window.on_open_document(move || {

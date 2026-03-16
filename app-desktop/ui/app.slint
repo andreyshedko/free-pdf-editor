@@ -136,6 +136,62 @@ component RecentPathMenuItem inherits Rectangle {
     }
 }
 
+component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> tooltip-text: "";
+    in property <bool> enabled: true;
+    in property <bool> dark-theme: true;
+    callback clicked();
+
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: !root.enabled ? transparent
+        : btn-area.pressed ? (root.dark-theme ? #1e3a5f : #bfdbfe)
+        : btn-area.has-hover ? (root.dark-theme ? #1e293b : #e2e8f0)
+        : transparent;
+
+    Image {
+        width: 18px;
+        height: 18px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon;
+        colorize: !root.enabled
+            ? (root.dark-theme ? #4b5563 : #9ca3af)
+            : btn-area.pressed
+                ? (root.dark-theme ? #38bdf8 : #0ea5e9)
+                : (root.dark-theme ? #e2e8f0 : #334155);
+    }
+
+    if btn-area.has-hover && root.tooltip-text != "" : Rectangle {
+        x: (parent.width - tt-lbl.preferred-width - 16px) / 2;
+        y: parent.height + 4px;
+        width: tt-lbl.preferred-width + 16px;
+        height: tt-lbl.preferred-height + 8px;
+        background: root.dark-theme ? #0a1020 : #ffffff;
+        border-width: 1px;
+        border-color: root.dark-theme ? #334155 : #cbd5e1;
+        border-radius: 4px;
+        z: 100;
+
+        tt-lbl := Text {
+            x: 8px;
+            y: 4px;
+            text: root.tooltip-text;
+            font-size: 11px;
+            color: root.dark-theme ? #e2e8f0 : #334155;
+        }
+    }
+
+    btn-area := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component AppWindow inherits Window {
     title: root.tr_app_title;
     min-width: 900px;
@@ -246,11 +302,13 @@ export component AppWindow inherits Window {
         root.active-menu == 5 ? root.tr_menu_tools :
         root.tr_menu_license;
     property <string> shortcut-tooltip:
-        root.active-menu == 0 ? "[O] Open: Ctrl+O\n[S] Save: Ctrl+S\n[SA] Save As: Ctrl+Shift+S" :
-        root.active-menu == 1 ? "[U] Undo: Ctrl+Z\n[R] Redo: Ctrl+Y" :
-        root.active-menu == 2 ? "[+] Zoom +: Ctrl++ or Ctrl+Up\n[-] Zoom -: Ctrl+- or Ctrl+Down\n[1] 100%: Ctrl+0" :
-        root.active-menu == 4 ? "[>] Next: PageDown or RightArrow\n[<] Prev: PageUp or LeftArrow" :
-        "No keyboard shortcuts assigned for this menu.";
+        root.active-menu == 0 ? "Open: Ctrl+O\nSave: Ctrl+S\nSave As: Ctrl+Shift+S\nClose: Ctrl+W" :
+        root.active-menu == 1 ? "Undo: Ctrl+Z\nRedo: Ctrl+Y" :
+        root.active-menu == 2 ? "Zoom In: Ctrl+=\nZoom Out: Ctrl+-\n100%: Ctrl+0" :
+        root.active-menu == 3 ? "Highlight: Ctrl+H\nNote: Ctrl+J" :
+        root.active-menu == 4 ? "Previous: PgUp\nNext: PgDn\nDelete Page: Del\nRotate Page: Ctrl+R" :
+        root.active-menu == 5 ? "Insert Text: Ctrl+T\nFont Sub: Ctrl+Shift+F\nInsert Image: Ctrl+I\nPassword: Ctrl+P\nRedact: Ctrl+Shift+X\nOCR: Ctrl+Shift+O\nReorder: Ctrl+Shift+G\nMerge: Ctrl+M\nCreate Field: Ctrl+Shift+N\nSet Value: Ctrl+Shift+V\nDetect: Ctrl+Shift+D\nExport: Ctrl+Shift+E" :
+        "";
 
     property <brush> color-bg: root.dark-theme ? #0b1220 : #f8fafc;
     property <brush> color-header: root.dark-theme ? #111827 : #f1f5f9;
@@ -502,6 +560,102 @@ export component AppWindow inherits Window {
                 return accept;
             }
 
+            // Close document
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "W" || event.text == "w")) {
+                root.close-document();
+                return accept;
+            }
+
+            // Open recent files (Alt+1..5)
+            if (event.modifiers.alt && event.text == "1") { root.open-recent(0); return accept; }
+            if (event.modifiers.alt && event.text == "2") { root.open-recent(1); return accept; }
+            if (event.modifiers.alt && event.text == "3") { root.open-recent(2); return accept; }
+            if (event.modifiers.alt && event.text == "4") { root.open-recent(3); return accept; }
+            if (event.modifiers.alt && event.text == "5") { root.open-recent(4); return accept; }
+
+            // Annotate shortcuts
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "H" || event.text == "h")) {
+                root.add-highlight();
+                return accept;
+            }
+
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "J" || event.text == "j")) {
+                root.add-note();
+                return accept;
+            }
+
+            // Page shortcuts
+            if (!event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && event.text == Key.Delete) {
+                root.delete-current-page();
+                return accept;
+            }
+
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "R" || event.text == "r")) {
+                root.rotate-current-page();
+                return accept;
+            }
+
+            // Tools shortcuts
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "T" || event.text == "t")) {
+                root.tools-insert-text();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "F" || event.text == "f")) {
+                root.tools-font-substitute();
+                return accept;
+            }
+
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "I" || event.text == "i")) {
+                root.tools-insert-image();
+                return accept;
+            }
+
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "P" || event.text == "p")) {
+                root.tools-set-password();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "X" || event.text == "x")) {
+                root.tools-redact-region();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "O" || event.text == "o")) {
+                root.tools-apply-ocr();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "G" || event.text == "g")) {
+                root.tools-reorder-pages();
+                return accept;
+            }
+
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "M" || event.text == "m")) {
+                root.tools-merge-document();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "N" || event.text == "n")) {
+                root.tools-create-field();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "V" || event.text == "v")) {
+                root.tools-set-field-value();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "D" || event.text == "d")) {
+                root.tools-detect-fields();
+                return accept;
+            }
+
+            if (event.modifiers.control && event.modifiers.shift && !event.modifiers.alt && (event.text == "E" || event.text == "e")) {
+                root.tools-export-form-data();
+                return accept;
+            }
+
             return reject;
         }
 
@@ -587,6 +741,51 @@ export component AppWindow inherits Window {
         Rectangle {
             height: 2px;
             background: root.color-accent;
+        }
+
+        // ── Icon toolbar ─────────────────────────────────────────────────────
+        Rectangle {
+            height: root.compact-mode ? 36px : 40px;
+            background: root.color-header-2;
+            border-width: 1px;
+            border-color: root.color-border;
+            animate height { duration: 180ms; }
+
+            HorizontalBox {
+                padding-left: root.compact-mode ? 6px : 8px;
+                padding-right: root.compact-mode ? 6px : 8px;
+                padding-top: root.compact-mode ? 2px : 4px;
+                padding-bottom: root.compact-mode ? 2px : 4px;
+                spacing: 2px;
+                alignment: start;
+
+                IconButton { icon: @image-url("icons/open.svg"); tooltip-text: root.tr_open + " (Ctrl+O)"; dark-theme: root.dark-theme; clicked => { root.open-document(); } }
+                IconButton { icon: @image-url("icons/save.svg"); tooltip-text: root.tr_save + " (Ctrl+S)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.save-document(); } }
+
+                Rectangle { width: 1px; height: root.compact-mode ? 20px : 24px; background: root.color-border; }
+
+                IconButton { icon: @image-url("icons/undo.svg"); tooltip-text: root.tr_undo + " (Ctrl+Z)"; dark-theme: root.dark-theme; enabled: root.has-document && root.can-undo; clicked => { root.undo(); } }
+                IconButton { icon: @image-url("icons/redo.svg"); tooltip-text: root.tr_redo + " (Ctrl+Y)"; dark-theme: root.dark-theme; enabled: root.has-document && root.can-redo; clicked => { root.redo(); } }
+
+                Rectangle { width: 1px; height: root.compact-mode ? 20px : 24px; background: root.color-border; }
+
+                IconButton { icon: @image-url("icons/zoom-in.svg"); tooltip-text: root.tr_zoom + " + (Ctrl+=)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.zoom-in(); } }
+                IconButton { icon: @image-url("icons/zoom-out.svg"); tooltip-text: root.tr_zoom + " - (Ctrl+-)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.zoom-out(); } }
+
+                Rectangle { width: 1px; height: root.compact-mode ? 20px : 24px; background: root.color-border; }
+
+                IconButton { icon: @image-url("icons/prev-page.svg"); tooltip-text: root.tr_previous + " (PgUp)"; dark-theme: root.dark-theme; enabled: root.has-document && root.current-page > 1; clicked => { root.prev-page(); } }
+                IconButton { icon: @image-url("icons/next-page.svg"); tooltip-text: root.tr_next + " (PgDn)"; dark-theme: root.dark-theme; enabled: root.has-document && root.current-page < root.page-count; clicked => { root.next-page(); } }
+
+                Rectangle { width: 1px; height: root.compact-mode ? 20px : 24px; background: root.color-border; }
+
+                IconButton { icon: @image-url("icons/insert-text.svg"); tooltip-text: root.tr_insert_text + " (Ctrl+T)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.tools-insert-text(); } }
+                IconButton { icon: @image-url("icons/insert-image.svg"); tooltip-text: root.tr_insert_image + " (Ctrl+I)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.tools-insert-image(); } }
+                IconButton { icon: @image-url("icons/highlight.svg"); tooltip-text: root.tr_highlight + " (Ctrl+H)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.add-highlight(); } }
+                IconButton { icon: @image-url("icons/note.svg"); tooltip-text: root.tr_note + " (Ctrl+J)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.add-note(); } }
+                IconButton { icon: @image-url("icons/rotate.svg"); tooltip-text: root.tr_rotate_page + " (Ctrl+R)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.rotate-current-page(); } }
+                IconButton { icon: @image-url("icons/delete.svg"); tooltip-text: root.tr_delete_page + " (Del)"; dark-theme: root.dark-theme; enabled: root.has-document; clicked => { root.delete-current-page(); } }
+            }
         }
 
         Rectangle {
@@ -1099,7 +1298,7 @@ export component AppWindow inherits Window {
                             NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_open; shortcut: "Ctrl+O"; activated => { root.open-document(); root.menu-open = false; } }
                             NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_save; shortcut: "Ctrl+S"; enabled: root.has-document; activated => { root.save-document(); root.menu-open = false; } }
                             NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_save_as; shortcut: "Ctrl+Shift+S"; enabled: root.has-document; activated => { root.save-document-as(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_close; shortcut: "Esc"; enabled: root.has-document; activated => { root.close-document(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_close; shortcut: "Ctrl+W"; enabled: root.has-document; activated => { root.close-document(); root.menu-open = false; } }
                             Rectangle { height: 1px; background: root.color-border; }
                             Rectangle {
                                 height: 24px;
@@ -1161,8 +1360,8 @@ export component AppWindow inherits Window {
 
                         if root.active-menu == 3 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_highlight; shortcut: "H"; enabled: root.has-document; activated => { root.add-highlight(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_note; shortcut: "N"; enabled: root.has-document; activated => { root.add-note(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_highlight; shortcut: "Ctrl+H"; enabled: root.has-document; activated => { root.add-highlight(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_note; shortcut: "Ctrl+J"; enabled: root.has-document; activated => { root.add-note(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 4 : VerticalBox {
@@ -1170,24 +1369,24 @@ export component AppWindow inherits Window {
                             NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_previous; shortcut: "PgUp"; enabled: root.has-document && root.current-page > 1; activated => { root.prev-page(); root.menu-open = false; } }
                             NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_next; shortcut: "PgDn"; enabled: root.has-document && root.current-page < root.page-count; activated => { root.next-page(); root.menu-open = false; } }
                             NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_delete_page; shortcut: "Del"; enabled: root.has-document; activated => { root.delete-current-page(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_rotate_page; shortcut: "R"; enabled: root.has-document; activated => { root.rotate-current-page(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_rotate_page; shortcut: "Ctrl+R"; enabled: root.has-document; activated => { root.rotate-current-page(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 5 : VerticalBox {
                             spacing: root.compact-mode ? 4px : 6px;
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_insert_text; shortcut: "T"; enabled: root.has-document; activated => { root.tools-insert-text(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_font_substitute; shortcut: "F"; enabled: root.has-document; activated => { root.tools-font-substitute(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_insert_image; shortcut: "I"; enabled: root.has-document; activated => { root.tools-insert-image(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_insert_text; shortcut: "Ctrl+T"; enabled: root.has-document; activated => { root.tools-insert-text(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_font_substitute; shortcut: "Ctrl+Shift+F"; enabled: root.has-document; activated => { root.tools-font-substitute(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_insert_image; shortcut: "Ctrl+I"; enabled: root.has-document; activated => { root.tools-insert-image(); root.menu-open = false; } }
                             Text { text: root.tr_click_image_to_edit; color: root.color-muted; font-size: 11px; }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_set_password; shortcut: "P"; enabled: root.has-document; activated => { root.tools-set-password(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_redact; shortcut: "R"; enabled: root.has-document; activated => { root.tools-redact-region(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_apply_ocr; shortcut: "OCR"; enabled: root.has-document; activated => { root.tools-apply-ocr(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_reorder_pages; shortcut: "PG"; enabled: root.has-document; activated => { root.tools-reorder-pages(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_merge; shortcut: "M"; enabled: root.has-document; activated => { root.tools-merge-document(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_create_field; shortcut: "C"; enabled: root.has-document; activated => { root.tools-create-field(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_set_field_value; shortcut: "S"; enabled: root.has-document; activated => { root.tools-set-field-value(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_detect_fields; shortcut: "D"; enabled: root.has-document; activated => { root.tools-detect-fields(); root.menu-open = false; } }
-                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_export_fields; shortcut: "E"; enabled: root.has-document; activated => { root.tools-export-form-data(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_set_password; shortcut: "Ctrl+P"; enabled: root.has-document; activated => { root.tools-set-password(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_redact; shortcut: "Ctrl+Shift+X"; enabled: root.has-document; activated => { root.tools-redact-region(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_apply_ocr; shortcut: "Ctrl+Shift+O"; enabled: root.has-document; activated => { root.tools-apply-ocr(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_reorder_pages; shortcut: "Ctrl+Shift+G"; enabled: root.has-document; activated => { root.tools-reorder-pages(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_merge; shortcut: "Ctrl+M"; enabled: root.has-document; activated => { root.tools-merge-document(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_create_field; shortcut: "Ctrl+Shift+N"; enabled: root.has-document; activated => { root.tools-create-field(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_set_field_value; shortcut: "Ctrl+Shift+V"; enabled: root.has-document; activated => { root.tools-set-field-value(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_detect_fields; shortcut: "Ctrl+Shift+D"; enabled: root.has-document; activated => { root.tools-detect-fields(); root.menu-open = false; } }
+                            NativeMenuItem { dark-theme: root.dark-theme; label: root.tr_export_fields; shortcut: "Ctrl+Shift+E"; enabled: root.has-document; activated => { root.tools-export-form-data(); root.menu-open = false; } }
                         }
 
                         if root.active-menu == 6 : VerticalBox {

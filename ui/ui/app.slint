@@ -10,6 +10,16 @@ export component AppWindow inherits Window {
     in property <string> status-text: "Ready";
     in property <int> page-count: 0;
     in property <int> current-page: 0;
+    in property <bool> dark-theme: false;
+
+    property <brush> color-bg:     root.dark-theme ? #0b1220 : #f8fafc;
+    property <brush> color-header: root.dark-theme ? #111827 : #f1f5f9;
+    property <brush> color-border: root.dark-theme ? #334155 : #cbd5e1;
+    property <brush> color-text:   root.dark-theme ? #e2e8f0 : #0f172a;
+    property <brush> color-muted:  root.dark-theme ? #94a3b8 : #64748b;
+    property <brush> color-accent: root.dark-theme ? #38bdf8 : #0ea5e9;
+
+    background: root.color-bg;
 
     // Callbacks translated into Commands by Rust controllers.
     callback open-document();
@@ -19,57 +29,102 @@ export component AppWindow inherits Window {
     callback next-page();
     callback prev-page();
 
-    VerticalBox {
-        // ── Toolbar ─────────────────────────────────────────────────────────
-        HorizontalBox {
-            height: 40px;
-            padding: 4px;
-            spacing: 4px;
+    forward-focus: kb;
 
-            Button {
-                text: "Open";
-                clicked => { root.open-document(); }
+    kb := FocusScope {
+        width: parent.width;
+        height: parent.height;
+
+        key-pressed(event) => {
+            if (event.modifiers.control && (event.text == "O" || event.text == "o")) {
+                root.open-document(); return accept;
             }
-            Button {
-                text: "Save";
-                clicked => { root.save-document(); }
+            if (event.modifiers.control && (event.text == "S" || event.text == "s")) {
+                root.save-document(); return accept;
             }
-            Button {
-                text: "Zoom In";
-                clicked => { root.zoom-in(); }
+            if (event.modifiers.control && (event.text == "+" || event.text == "=")) {
+                root.zoom-in(); return accept;
             }
-            Button {
-                text: "Zoom Out";
-                clicked => { root.zoom-out(); }
+            if (event.modifiers.control && event.text == "-") {
+                root.zoom-out(); return accept;
             }
-            Button {
-                text: "◀";
-                clicked => { root.prev-page(); }
+            if (event.text == Key.PageDown || event.text == Key.RightArrow) {
+                root.next-page(); return accept;
             }
-            Button {
-                text: "▶";
-                clicked => { root.next-page(); }
+            if (event.text == Key.PageUp || event.text == Key.LeftArrow) {
+                root.prev-page(); return accept;
             }
+            return reject;
         }
 
-        // ── Page viewer ──────────────────────────────────────────────────────
-        ScrollView {
-            Image {
-                source: root.page-image;
-                image-fit: contain;
+        VerticalBox {
+            // ── Toolbar ─────────────────────────────────────────────────────────
+            Rectangle {
+                height: 48px;
+                background: root.color-header;
+                border-width: 1px;
+                border-color: root.color-border;
+
+                HorizontalBox {
+                    padding: 6px;
+                    spacing: 4px;
+                    alignment: start;
+
+                    Button {
+                        text: "Open  Ctrl+O";
+                        clicked => { root.open-document(); }
+                    }
+                    Button {
+                        text: "Save  Ctrl+S";
+                        clicked => { root.save-document(); }
+                    }
+                    Button {
+                        text: "Zoom In  Ctrl+=";
+                        clicked => { root.zoom-in(); }
+                    }
+                    Button {
+                        text: "Zoom Out  Ctrl+-";
+                        clicked => { root.zoom-out(); }
+                    }
+                    Button {
+                        text: "◀  PgUp";
+                        clicked => { root.prev-page(); }
+                    }
+                    Button {
+                        text: "▶  PgDn";
+                        clicked => { root.next-page(); }
+                    }
+                }
             }
-        }
 
-        // ── Status bar ───────────────────────────────────────────────────────
-        Rectangle {
-            height: 24px;
-            background: #e8e8e8;
+            Rectangle {
+                height: 2px;
+                background: root.color-accent;
+            }
 
-            Text {
-                x: 8px;
-                text: root.status-text;
-                font-size: 12px;
-                vertical-alignment: center;
+            // ── Page viewer ──────────────────────────────────────────────────────
+            ScrollView {
+                vertical-stretch: 1;
+                Image {
+                    source: root.page-image;
+                    image-fit: contain;
+                }
+            }
+
+            // ── Status bar ───────────────────────────────────────────────────────
+            Rectangle {
+                height: 24px;
+                background: root.color-header;
+                border-width: 1px;
+                border-color: root.color-border;
+
+                Text {
+                    x: 8px;
+                    text: root.status-text;
+                    font-size: 12px;
+                    color: root.color-text;
+                    vertical-alignment: center;
+                }
             }
         }
     }
