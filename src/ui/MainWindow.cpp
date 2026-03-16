@@ -22,9 +22,11 @@
 #include <QPalette>
 #include <QPainter>
 #include <QSettings>
+#include <QSize>
 #include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTimer>
 #include <QWidget>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -91,6 +93,8 @@ void MainWindow::setupUi() {
     setCentralWidget(central);
 
     m_toolbar = new Toolbar(this);
+    m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    m_toolbar->setIconSize(QSize(20, 20));
     addToolBar(m_toolbar);
 
     m_statusLabel = new QLabel(tr("Ready"), this);
@@ -126,10 +130,10 @@ void MainWindow::setupActions() {
 
     const auto iconWithFallback = [&](const char* resourcePath, const QIcon& fallback, const QChar letter) {
         const QIcon resourceIcon(QString::fromLatin1(resourcePath));
-        if (!resourceIcon.isNull()) {
+        if (!resourceIcon.isNull() && !resourceIcon.pixmap(16, 16).isNull()) {
             return resourceIcon;
         }
-        if (!fallback.isNull()) {
+        if (!fallback.isNull() && !fallback.pixmap(16, 16).isNull()) {
             return fallback;
         }
         return letterFallbackIcon(letter);
@@ -916,6 +920,7 @@ void MainWindow::runFind() {
     }
 
     m_lastFindQuery = trimmed;
+    m_pageView->setSearchQuery(trimmed);
     m_findMatches = m_controller.findOverlayMatches(trimmed);
     updateFindStatusLabel();
     if (!m_findMatches.empty()) {
@@ -961,6 +966,9 @@ void MainWindow::applyFindMatch(int index) {
         m_controller.setCurrentPage(page);
     }
     m_pageView->setActiveOverlay(overlay);
+    QTimer::singleShot(0, this, [this, overlay]() {
+        m_pageView->setActiveOverlay(overlay);
+    });
     updateFindStatusLabel();
     m_statusLabel->setText(tr("Match %1 of %2").arg(index + 1).arg(m_findMatches.size()));
 }
@@ -972,6 +980,7 @@ void MainWindow::clearFindState(bool clearQuery) {
     m_findMatches.clear();
     m_findMatchIndex = -1;
     if (m_pageView) {
+        m_pageView->setSearchQuery({});
         m_pageView->setActiveOverlay(-1);
     }
     updateFindStatusLabel();

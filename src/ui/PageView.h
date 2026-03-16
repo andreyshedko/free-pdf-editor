@@ -2,6 +2,7 @@
 
 #include "editor/EditorController.h"
 
+#include <QString>
 #include <QWidget>
 
 class QMouseEvent;
@@ -15,6 +16,7 @@ public:
 
     void setZoom(float zoom);
     void setActiveOverlay(int overlayIndex);
+    void setSearchQuery(QString query);
     [[nodiscard]] float zoom() const { return m_zoom; }
 
 signals:
@@ -55,4 +57,5 @@ private:
     QRectF m_dragStartRect;
     QPoint m_lastMousePos;
     QPointF m_pan;
+    QString m_searchQuery;
 };

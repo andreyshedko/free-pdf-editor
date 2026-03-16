@@ -161,6 +161,15 @@ void PageView::setActiveOverlay(int overlayIndex) {
     update();
 }
 
+void PageView::setSearchQuery(QString query) {
+    const QString normalized = query.trimmed();
+    if (m_searchQuery == normalized) {
+        return;
+    }
+    m_searchQuery = normalized;
+    update();
+}
+
 void PageView::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(235, 238, 243));
@@ -315,10 +324,47 @@ void PageView::paintEvent(QPaintEvent*) {
         }
     }
 
+    if (!m_searchQuery.isEmpty()) {
+        for (const auto& objPtr : pageModel->overlayObjects) {
+            if (!objPtr) {
+                continue;
+            }
+
+            bool matchesSearch = false;
+            if (objPtr->kind() == overlay::OverlayObject::Kind::TextEdit) {
+                const auto* t = static_cast<const overlay::TextEditObject*>(objPtr.get());
+                matchesSearch = t->text.contains(m_searchQuery, Qt::CaseInsensitive);
+            } else if (objPtr->kind() == overlay::OverlayObject::Kind::Annotation) {
+                const auto* a = static_cast<const overlay::AnnotationObject*>(objPtr.get());
+                matchesSearch = a->text.contains(m_searchQuery, Qt::CaseInsensitive);
+            }
+
+            if (!matchesSearch) {
+                continue;
+            }
+
+            const QRectF matchRect = overlayRect(objPtr.get());
+            if (matchRect.isEmpty()) {
+                continue;
+            }
+
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(255, 215, 0, 120));
+            painter.drawRect(matchRect);
+            painter.setPen(QPen(QColor(255, 186, 0), 2));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(matchRect);
+        }
+    }
+
     if (m_activeOverlay >= 0) {
         const auto* active = m_controller.currentPageOverlayAt(m_activeOverlay);
         const QRectF selectedRect = overlayRect(active);
         if (active && !selectedRect.isEmpty()) {
+            painter.setBrush(QColor(255, 235, 59, 110));
+            painter.setPen(Qt::NoPen);
+            painter.drawRect(selectedRect);
+
             painter.setPen(QPen(QColor(250, 168, 64), 2, Qt::DashLine));
             painter.setBrush(Qt::NoBrush);
             painter.drawRect(selectedRect);
