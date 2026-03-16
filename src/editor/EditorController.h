@@ -100,6 +100,8 @@ public:
 
         bool insertBlankPage();
         int findInOverlays(const QString& needle) const;
+        std::vector<std::pair<int, int>> findOverlayMatches(const QString& needle) const;
+        int findInAllOverlays(const QString& needle, int* firstMatchPage = nullptr, int* firstMatchOverlay = nullptr) const;
         bool editTextValue(const QString& newValue);
         bool setTextFontTag(const QString& fontTag);
         bool setTextFontSize(qreal size);

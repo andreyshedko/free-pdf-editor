@@ -736,28 +736,62 @@ bool EditorController::resizeFirstImage(qreal scale) {
 }
 
 int EditorController::findInOverlays(const QString& needle) const {
+    return findInAllOverlays(needle);
+}
+
+std::vector<std::pair<int, int>> EditorController::findOverlayMatches(const QString& needle) const {
+    std::vector<std::pair<int, int>> matches;
+    if (!m_document.isOpen() || needle.isEmpty()) {
+        return matches;
+    }
+
+    for (int pageIndex = 0; pageIndex < m_document.pageCount(); ++pageIndex) {
+        const auto& page = m_document.page(pageIndex);
+        for (int overlayIndex = 0; overlayIndex < static_cast<int>(page.overlayObjects.size()); ++overlayIndex) {
+            const auto& overlay = page.overlayObjects[static_cast<size_t>(overlayIndex)];
+            if (!overlay) {
+                continue;
+            }
+
+            bool match = false;
+            if (overlay->kind() == overlay::OverlayObject::Kind::TextEdit) {
+                const auto* t = static_cast<const overlay::TextEditObject*>(overlay.get());
+                match = t->text.contains(needle, Qt::CaseInsensitive);
+            } else if (overlay->kind() == overlay::OverlayObject::Kind::Annotation) {
+                const auto* a = static_cast<const overlay::AnnotationObject*>(overlay.get());
+                match = a->text.contains(needle, Qt::CaseInsensitive);
+            }
+
+            if (match) {
+                matches.emplace_back(pageIndex, overlayIndex);
+            }
+        }
+    }
+
+    return matches;
+}
+
+int EditorController::findInAllOverlays(const QString& needle, int* firstMatchPage, int* firstMatchOverlay) const {
+    if (firstMatchPage) {
+        *firstMatchPage = -1;
+    }
+    if (firstMatchOverlay) {
+        *firstMatchOverlay = -1;
+    }
     if (!m_document.isOpen() || needle.isEmpty()) {
         return 0;
     }
-    int hits = 0;
-    const auto& page = m_document.page(m_currentPage);
-    for (const auto& overlay : page.overlayObjects) {
-        if (!overlay) {
-            continue;
+
+    const auto matches = findOverlayMatches(needle);
+    if (!matches.empty()) {
+        if (firstMatchPage) {
+            *firstMatchPage = matches.front().first;
         }
-        if (overlay->kind() == overlay::OverlayObject::Kind::TextEdit) {
-            const auto* t = static_cast<const overlay::TextEditObject*>(overlay.get());
-            if (t->text.contains(needle, Qt::CaseInsensitive)) {
-                ++hits;
-            }
-        } else if (overlay->kind() == overlay::OverlayObject::Kind::Annotation) {
-            const auto* a = static_cast<const overlay::AnnotationObject*>(overlay.get());
-            if (a->text.contains(needle, Qt::CaseInsensitive)) {
-                ++hits;
-            }
+        if (firstMatchOverlay) {
+            *firstMatchOverlay = matches.front().second;
         }
     }
-    return hits;
+    return static_cast<int>(matches.size());
 }
 
 bool EditorController::insertBlankPage() {

@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/assets">
+        <file alias="close.svg">../../assets/close.svg</file>
+        <file alias="find-in-page.svg">../../assets/find-in-page.svg</file>
+        <file alias="open.svg">../../assets/open.svg</file>
+        <file alias="print.svg">../../assets/print.svg</file>
+        <file alias="redo.svg">../../assets/redo.svg</file>
+        <file alias="save-as-outline.svg">../../assets/save-as-outline.svg</file>
+        <file alias="save.svg">../../assets/save.svg</file>
+        <file alias="undo.svg">../../assets/undo.svg</file>
+    </qresource>
+</RCC>

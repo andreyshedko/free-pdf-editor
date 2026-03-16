@@ -90,6 +90,7 @@ target_include_directories(editor PUBLIC ${SRC_ROOT})
 target_link_libraries(editor PUBLIC Qt6::Core Qt6::Gui document pdf_engine ocr utils)
 
 add_library(ui
+    resources/assets.qrc
     ui/Toolbar.h
     ui/Toolbar.cpp
     ui/ThumbnailPanel.h

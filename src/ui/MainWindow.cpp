@@ -20,6 +20,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPalette>
+#include <QPainter>
 #include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
@@ -95,33 +96,81 @@ void MainWindow::setupUi() {
     m_statusLabel = new QLabel(tr("Ready"), this);
     statusBar()->addPermanentWidget(m_statusLabel, 1);
 
+    m_findStatusLabel = new QLabel(this);
+    statusBar()->addPermanentWidget(m_findStatusLabel);
+    updateFindStatusLabel();
+
     m_editableStateLabel = new QLabel(this);
     statusBar()->addPermanentWidget(m_editableStateLabel);
     updateEditableStateIndicator();
 }
 
 void MainWindow::setupActions() {
+    const auto letterFallbackIcon = [](const QChar letter, const QColor& bg = QColor(73, 147, 235)) {
+        QPixmap pm(16, 16);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setBrush(bg);
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(QRectF(0.5, 0.5, 15.0, 15.0), 3.0, 3.0);
+        p.setPen(QColor(235, 239, 245));
+        QFont f = p.font();
+        f.setBold(true);
+        f.setPixelSize(10);
+        p.setFont(f);
+        p.drawText(pm.rect(), Qt::AlignCenter, QString(letter));
+        p.end();
+        return QIcon(pm);
+    };
+
+    const auto iconWithFallback = [&](const char* resourcePath, const QIcon& fallback, const QChar letter) {
+        const QIcon resourceIcon(QString::fromLatin1(resourcePath));
+        if (!resourceIcon.isNull()) {
+            return resourceIcon;
+        }
+        if (!fallback.isNull()) {
+            return fallback;
+        }
+        return letterFallbackIcon(letter);
+    };
+
+    const auto configureMenuAction = [](QAction* action) {
+        action->setIconVisibleInMenu(true);
+        action->setShortcutVisibleInContextMenu(true);
+    };
+
     // File Menu
     auto* fileMenu = menuBar()->addMenu(tr("&File"));
-    const QIcon openIcon = style()->standardIcon(QStyle::SP_DirOpenIcon);
-    const QIcon saveIcon = style()->standardIcon(QStyle::SP_DialogSaveButton);
+    const QIcon openIcon = iconWithFallback(":/assets/open.svg", style()->standardIcon(QStyle::SP_DirOpenIcon), QChar('O'));
+    const QIcon saveIcon = iconWithFallback(":/assets/save.svg", style()->standardIcon(QStyle::SP_DialogSaveButton), QChar('S'));
+    const QIcon saveAsIcon = iconWithFallback(":/assets/save-as-outline.svg", saveIcon, QChar('A'));
+    const QIcon closeIcon = iconWithFallback(":/assets/close.svg", QIcon(), QChar('C'));
+    const QIcon printIcon = iconWithFallback(":/assets/print.svg", QIcon(), QChar('P'));
+    const QIcon undoIcon = iconWithFallback(":/assets/undo.svg", style()->standardIcon(QStyle::SP_ArrowBack), QChar('U'));
+    const QIcon redoIcon = iconWithFallback(":/assets/redo.svg", style()->standardIcon(QStyle::SP_ArrowForward), QChar('R'));
+    const QIcon findIcon = iconWithFallback(":/assets/find-in-page.svg", QIcon(), QChar('F'));
 
     auto* openAction = new QAction(openIcon, tr("&Open..."), this);
     openAction->setShortcut(QKeySequence::Open);
+    configureMenuAction(openAction);
     fileMenu->addAction(openAction);
 
     m_openRecentMenu = fileMenu->addMenu(tr("Open &Recent"));
 
     auto* saveAction = new QAction(saveIcon, tr("&Save Editable PDF"), this);
     saveAction->setShortcut(QKeySequence::Save);
+    configureMenuAction(saveAction);
     fileMenu->addAction(saveAction);
 
-    auto* saveAsAction = new QAction(tr("Save Editable PDF &As..."), this);
+    auto* saveAsAction = new QAction(saveAsIcon, tr("Save Editable PDF &As..."), this);
     saveAsAction->setShortcut(QKeySequence::SaveAs);
+    configureMenuAction(saveAsAction);
     fileMenu->addAction(saveAsAction);
 
-    auto* closeAction = new QAction(tr("&Close"), this);
+    auto* closeAction = new QAction(closeIcon, tr("&Close"), this);
     closeAction->setShortcut(QKeySequence::Close);
+    configureMenuAction(closeAction);
     fileMenu->addAction(closeAction);
 
     fileMenu->addSeparator();
@@ -141,31 +190,56 @@ void MainWindow::setupActions() {
 
     fileMenu->addSeparator();
 
-    auto* printAction = new QAction(tr("&Print..."), this);
+    auto* printAction = new QAction(printIcon, tr("&Print..."), this);
     printAction->setShortcut(QKeySequence::Print);
+    configureMenuAction(printAction);
     fileMenu->addAction(printAction);
 
     fileMenu->addSeparator();
 
     auto* exitAction = new QAction(tr("E&xit"), this);
     exitAction->setShortcut(QKeySequence::Quit);
+    configureMenuAction(exitAction);
     fileMenu->addAction(exitAction);
 
     // Edit Menu
     auto* editMenu = menuBar()->addMenu(tr("&Edit"));
-    auto* undoAction = new QAction(style()->standardIcon(QStyle::SP_ArrowBack), tr("&Undo"), this);
+    auto* undoAction = new QAction(undoIcon, tr("&Undo"), this);
     undoAction->setShortcut(QKeySequence::Undo);
+    configureMenuAction(undoAction);
     editMenu->addAction(undoAction);
 
-    auto* redoAction = new QAction(style()->standardIcon(QStyle::SP_ArrowForward), tr("&Redo"), this);
+    auto* redoAction = new QAction(redoIcon, tr("&Redo"), this);
     redoAction->setShortcut(QKeySequence::Redo);
+    configureMenuAction(redoAction);
     editMenu->addAction(redoAction);
 
     editMenu->addSeparator();
 
-    auto* findAction = new QAction(tr("&Find..."), this);
+    auto* findAction = new QAction(findIcon, tr("&Find..."), this);
     findAction->setShortcut(QKeySequence::Find);
+    configureMenuAction(findAction);
     editMenu->addAction(findAction);
+
+    auto* findNextAction = new QAction(tr("Find &Next"), this);
+    findNextAction->setShortcut(QKeySequence::FindNext);
+    configureMenuAction(findNextAction);
+    editMenu->addAction(findNextAction);
+
+    auto* findPreviousAction = new QAction(tr("Find &Previous"), this);
+    findPreviousAction->setShortcut(QKeySequence::FindPrevious);
+    configureMenuAction(findPreviousAction);
+    editMenu->addAction(findPreviousAction);
+
+    auto* findWrapAction = new QAction(tr("Wrap Find"), this);
+    findWrapAction->setCheckable(true);
+    findWrapAction->setChecked(m_findWrapEnabled);
+    editMenu->addAction(findWrapAction);
+
+    auto* clearFindAction = new QAction(tr("Clear Find Highlight"), this);
+    clearFindAction->setShortcut(QKeySequence(Qt::Key_Escape));
+    clearFindAction->setShortcutContext(Qt::WindowShortcut);
+    addAction(clearFindAction);
 
     // View Menu
     auto* viewMenu = menuBar()->addMenu(tr("&View"));
@@ -349,14 +423,48 @@ void MainWindow::setupActions() {
     connect(undoAction, &QAction::triggered, &m_controller, &editor::EditorController::undo);
     connect(redoAction, &QAction::triggered, &m_controller, &editor::EditorController::redo);
     connect(deletePageAction, &QAction::triggered, this, [this]() { m_controller.deleteCurrentPage(); });
-    connect(findAction, &QAction::triggered, this, [this]() {
-        bool ok = false;
-        const QString query = QInputDialog::getText(this, tr("Find"), tr("Find text in overlays:"), QLineEdit::Normal, {}, &ok);
-        if (!ok || query.isEmpty()) {
+    connect(findAction, &QAction::triggered, this, &MainWindow::runFind);
+    connect(findNextAction, &QAction::triggered, this, [this]() {
+        if (m_findMatches.empty()) {
+            runFind();
             return;
         }
-        const int hits = m_controller.findInOverlays(query);
-        m_statusLabel->setText(tr("Found %1 match(es) on current page").arg(hits));
+        const int maxIndex = static_cast<int>(m_findMatches.size()) - 1;
+        if (m_findMatchIndex >= maxIndex) {
+            if (!m_findWrapEnabled) {
+                m_statusLabel->setText(tr("Reached last match"));
+                return;
+            }
+            m_findMatchIndex = 0;
+        } else {
+            ++m_findMatchIndex;
+        }
+        applyFindMatch(m_findMatchIndex);
+    });
+    connect(findPreviousAction, &QAction::triggered, this, [this]() {
+        if (m_findMatches.empty()) {
+            runFind();
+            return;
+        }
+        if (m_findMatchIndex <= 0) {
+            if (!m_findWrapEnabled) {
+                m_statusLabel->setText(tr("Reached first match"));
+                return;
+            }
+            m_findMatchIndex = static_cast<int>(m_findMatches.size()) - 1;
+        } else {
+            --m_findMatchIndex;
+        }
+        applyFindMatch(m_findMatchIndex);
+    });
+    connect(findWrapAction, &QAction::toggled, this, [this](bool checked) {
+        m_findWrapEnabled = checked;
+        m_statusLabel->setText(checked ? tr("Find wrap enabled") : tr("Find wrap disabled"));
+        updateFindStatusLabel();
+    });
+    connect(clearFindAction, &QAction::triggered, this, [this]() {
+        clearFindState(false);
+        m_statusLabel->setText(tr("Find highlight cleared"));
     });
     connect(zoomInAction, &QAction::triggered, this, [this]() { m_pageView->setZoom(m_pageView->zoom() * 1.1f); });
     connect(zoomOutAction, &QAction::triggered, this, [this]() { m_pageView->setZoom(m_pageView->zoom() * 0.9f); });
@@ -786,6 +894,112 @@ void MainWindow::updateEditableStateIndicator() {
     const QString expectedPath = m_controller.expectedEditableOverlayMetadataPath();
     m_editableStateLabel->setText(tr("Editable metadata: missing"));
     m_editableStateLabel->setToolTip(expectedPath);
+}
+
+void MainWindow::runFind() {
+    bool ok = false;
+    const QString query = QInputDialog::getText(this,
+        tr("Find"),
+        tr("Find text in overlays:"),
+        QLineEdit::Normal,
+        m_lastFindQuery,
+        &ok);
+    if (!ok) {
+        return;
+    }
+
+    const QString trimmed = query.trimmed();
+    if (trimmed.isEmpty()) {
+        clearFindState(true);
+        m_statusLabel->setText(tr("Find cleared"));
+        return;
+    }
+
+    m_lastFindQuery = trimmed;
+    m_findMatches = m_controller.findOverlayMatches(trimmed);
+    updateFindStatusLabel();
+    if (!m_findMatches.empty()) {
+        m_findMatchIndex = 0;
+        applyFindMatch(m_findMatchIndex);
+        return;
+    }
+
+    const int previousPage = m_controller.currentPage();
+    int ocrHits = 0;
+    int firstOcrMatchPage = -1;
+    for (int page = 0; page < m_controller.pageCount(); ++page) {
+        m_controller.setCurrentPage(page);
+        const QString ocrText = m_controller.runOcrOnCurrentPage();
+        if (!ocrText.contains(trimmed, Qt::CaseInsensitive)) {
+            continue;
+        }
+        ++ocrHits;
+        if (firstOcrMatchPage < 0) {
+            firstOcrMatchPage = page;
+        }
+    }
+
+    m_pageView->setActiveOverlay(-1);
+    m_findMatchIndex = -1;
+    updateFindStatusLabel();
+    if (ocrHits > 0 && firstOcrMatchPage >= 0) {
+        m_controller.setCurrentPage(firstOcrMatchPage);
+        m_statusLabel->setText(tr("Found %1 page(s) via OCR").arg(ocrHits));
+    } else {
+        m_controller.setCurrentPage(previousPage);
+        m_statusLabel->setText(tr("No matches found"));
+    }
+}
+
+void MainWindow::applyFindMatch(int index) {
+    if (index < 0 || index >= static_cast<int>(m_findMatches.size())) {
+        return;
+    }
+
+    const auto [page, overlay] = m_findMatches[static_cast<size_t>(index)];
+    if (page != m_controller.currentPage()) {
+        m_controller.setCurrentPage(page);
+    }
+    m_pageView->setActiveOverlay(overlay);
+    updateFindStatusLabel();
+    m_statusLabel->setText(tr("Match %1 of %2").arg(index + 1).arg(m_findMatches.size()));
+}
+
+void MainWindow::clearFindState(bool clearQuery) {
+    if (clearQuery) {
+        m_lastFindQuery.clear();
+    }
+    m_findMatches.clear();
+    m_findMatchIndex = -1;
+    if (m_pageView) {
+        m_pageView->setActiveOverlay(-1);
+    }
+    updateFindStatusLabel();
+}
+
+void MainWindow::updateFindStatusLabel() {
+    if (!m_findStatusLabel) {
+        return;
+    }
+    if (m_lastFindQuery.isEmpty()) {
+        m_findStatusLabel->setText(tr("Find: idle"));
+        m_findStatusLabel->setToolTip(tr("Use Ctrl+F to search overlays"));
+        return;
+    }
+
+    const QString wrapText = m_findWrapEnabled ? tr("wrap on") : tr("wrap off");
+    if (m_findMatches.empty() || m_findMatchIndex < 0) {
+        m_findStatusLabel->setText(tr("Find: \"%1\" (0)").arg(m_lastFindQuery));
+        m_findStatusLabel->setToolTip(tr("No overlay matches, %1").arg(wrapText));
+        return;
+    }
+
+    m_findStatusLabel->setText(
+        tr("Find: \"%1\" (%2/%3)")
+            .arg(m_lastFindQuery)
+            .arg(m_findMatchIndex + 1)
+            .arg(m_findMatches.size()));
+    m_findStatusLabel->setToolTip(tr("%1").arg(wrapText));
 }
 
 void MainWindow::rebuildRecentMenu() {

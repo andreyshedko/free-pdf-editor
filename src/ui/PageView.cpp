@@ -146,6 +146,21 @@ void PageView::setZoom(float zoom) {
     update();
 }
 
+void PageView::setActiveOverlay(int overlayIndex) {
+    if (overlayIndex < 0) {
+        m_activeOverlay = -1;
+        update();
+        return;
+    }
+    if (overlayIndex >= m_controller.currentPageOverlayCount()) {
+        m_activeOverlay = -1;
+        update();
+        return;
+    }
+    m_activeOverlay = overlayIndex;
+    update();
+}
+
 void PageView::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(235, 238, 243));

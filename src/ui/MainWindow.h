@@ -3,6 +3,9 @@
 #include "editor/EditorController.h"
 
 #include <QMainWindow>
+#include <QString>
+#include <utility>
+#include <vector>
 
 class Toolbar;
 class ThumbnailPanel;
@@ -21,6 +24,10 @@ private:
     void setModernTheme();
     void setupUi();
     void setupActions();
+    void runFind();
+    void applyFindMatch(int index);
+    void clearFindState(bool clearQuery);
+    void updateFindStatusLabel();
     void rebuildRecentMenu();
     void refreshPanels();
     void updateEditableStateIndicator();
@@ -31,6 +38,11 @@ private:
     InspectorPanel* m_properties {nullptr};
     PageView* m_pageView {nullptr};
     QLabel* m_statusLabel {nullptr};
+    QLabel* m_findStatusLabel {nullptr};
     QLabel* m_editableStateLabel {nullptr};
     QMenu* m_openRecentMenu {nullptr};
+    QString m_lastFindQuery;
+    std::vector<std::pair<int, int>> m_findMatches;
+    int m_findMatchIndex {-1};
+    bool m_findWrapEnabled {true};
 };

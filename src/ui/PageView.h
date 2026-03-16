@@ -14,6 +14,7 @@ public:
     explicit PageView(editor::EditorController& controller, QWidget* parent = nullptr);
 
     void setZoom(float zoom);
+    void setActiveOverlay(int overlayIndex);
     [[nodiscard]] float zoom() const { return m_zoom; }
 
 signals:
