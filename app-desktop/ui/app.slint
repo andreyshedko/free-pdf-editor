@@ -302,12 +302,12 @@ export component AppWindow inherits Window {
         root.active-menu == 5 ? root.tr_menu_tools :
         root.tr_menu_license;
     property <string> shortcut-tooltip:
-        root.active-menu == 0 ? "Open: Ctrl+O\nSave: Ctrl+S\nSave As: Ctrl+Shift+S\nClose: Ctrl+W" :
-        root.active-menu == 1 ? "Undo: Ctrl+Z\nRedo: Ctrl+Y" :
-        root.active-menu == 2 ? "Zoom In: Ctrl+=\nZoom Out: Ctrl+-\n100%: Ctrl+0" :
-        root.active-menu == 3 ? "Highlight: Ctrl+H\nNote: Ctrl+J" :
-        root.active-menu == 4 ? "Previous: PgUp\nNext: PgDn\nDelete Page: Del\nRotate Page: Ctrl+R" :
-        root.active-menu == 5 ? "Insert Text: Ctrl+T\nFont Sub: Ctrl+Shift+F\nInsert Image: Ctrl+I\nPassword: Ctrl+P\nRedact: Ctrl+Shift+X\nOCR: Ctrl+Shift+O\nReorder: Ctrl+Shift+G\nMerge: Ctrl+M\nCreate Field: Ctrl+Shift+N\nSet Value: Ctrl+Shift+V\nDetect: Ctrl+Shift+D\nExport: Ctrl+Shift+E" :
+        root.active-menu == 0 ? (root.tr_open + ": Ctrl+O\n" + root.tr_save + ": Ctrl+S\n" + root.tr_save_as + ": Ctrl+Shift+S\n" + root.tr_close + ": Ctrl+W") :
+        root.active-menu == 1 ? (root.tr_undo + ": Ctrl+Z\n" + root.tr_redo + ": Ctrl+Y") :
+        root.active-menu == 2 ? (root.tr_zoom + " +: Ctrl+=\n" + root.tr_zoom + " -: Ctrl+-\n" + root.tr_reset_100 + ": Ctrl+0") :
+        root.active-menu == 3 ? (root.tr_highlight + ": Ctrl+H\n" + root.tr_note + ": Ctrl+J") :
+        root.active-menu == 4 ? (root.tr_previous + ": PgUp\n" + root.tr_next + ": PgDn\n" + root.tr_delete_page + ": Del\n" + root.tr_rotate_page + ": Ctrl+R") :
+        root.active-menu == 5 ? (root.tr_insert_text + ": Ctrl+T\n" + root.tr_font_substitute + ": Ctrl+Shift+F\n" + root.tr_insert_image + ": Ctrl+I\n" + root.tr_set_password + ": Ctrl+P\n" + root.tr_redact + ": Ctrl+Shift+X\n" + root.tr_apply_ocr + ": Ctrl+Shift+O\n" + root.tr_reorder_pages + ": Ctrl+Shift+G\n" + root.tr_merge + ": Ctrl+M\n" + root.tr_create_field + ": Ctrl+Shift+N\n" + root.tr_set_field_value + ": Ctrl+Shift+V\n" + root.tr_detect_fields + ": Ctrl+Shift+D\n" + root.tr_export_fields + ": Ctrl+Shift+E") :
         "";
 
     property <brush> color-bg: root.dark-theme ? #0b1220 : #f8fafc;
@@ -561,7 +561,7 @@ export component AppWindow inherits Window {
             }
 
             // Close document
-            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "W" || event.text == "w")) {
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && root.has-document && (event.text == "W" || event.text == "w")) {
                 root.close-document();
                 return accept;
             }

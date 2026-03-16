@@ -36,10 +36,10 @@ export component AppWindow inherits Window {
         height: parent.height;
 
         key-pressed(event) => {
-            if (event.modifiers.control && (event.text == "O" || event.text == "o")) {
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "O" || event.text == "o")) {
                 root.open-document(); return accept;
             }
-            if (event.modifiers.control && (event.text == "S" || event.text == "s")) {
+            if (event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "S" || event.text == "s")) {
                 root.save-document(); return accept;
             }
             if (event.modifiers.control && (event.text == "+" || event.text == "=")) {
