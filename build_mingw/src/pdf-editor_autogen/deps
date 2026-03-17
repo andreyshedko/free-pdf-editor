@@ -1,4 +1,5 @@
 pdf-editor_autogen/timestamp: \
 	C:/Users/shche/free-pdf-editor/src/CMakeLists.txt \
 	C:/Users/shche/free-pdf-editor/src/app/main.cpp \
+	C:/Users/shche/free-pdf-editor/src/resources/assets.qrc \
 	C:/Program\ Files/CMake/bin/cmake.exe

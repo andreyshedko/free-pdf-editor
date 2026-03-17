@@ -922,37 +922,61 @@ void MainWindow::runFind() {
     m_lastFindQuery = trimmed;
     m_pageView->setSearchQuery(trimmed);
     m_findMatches = m_controller.findOverlayMatches(trimmed);
-    updateFindStatusLabel();
-    if (!m_findMatches.empty()) {
-        m_findMatchIndex = 0;
-        applyFindMatch(m_findMatchIndex);
-        return;
-    }
 
     const int previousPage = m_controller.currentPage();
-    int ocrHits = 0;
-    int firstOcrMatchPage = -1;
+    int textHits = 0;
+    
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+
     for (int page = 0; page < m_controller.pageCount(); ++page) {
-        m_controller.setCurrentPage(page);
-        const QString ocrText = m_controller.runOcrOnCurrentPage();
-        if (!ocrText.contains(trimmed, Qt::CaseInsensitive)) {
+        bool hasOverlayMatch = false;
+        for (const auto& match : m_findMatches) {
+            if (match.first == page) {
+                hasOverlayMatch = true;
+                break;
+            }
+        }
+
+        if (hasOverlayMatch) {
             continue;
         }
-        ++ocrHits;
-        if (firstOcrMatchPage < 0) {
-            firstOcrMatchPage = page;
+
+        QString pageText = m_controller.extractPageText(page);
+        bool match = pageText.contains(trimmed, Qt::CaseInsensitive);
+
+        if (!match) {
+            m_controller.setCurrentPage(page);
+            const QString ocrText = m_controller.runOcrOnCurrentPage();
+            match = ocrText.contains(trimmed, Qt::CaseInsensitive);
+        }
+
+        if (match) {
+            m_findMatches.emplace_back(page, -1);
+            ++textHits;
         }
     }
 
+    QApplication::restoreOverrideCursor();
+
+    std::sort(m_findMatches.begin(), m_findMatches.end(), [](const auto& a, const auto& b) {
+        if (a.first != b.first) return a.first < b.first;
+        return a.second < b.second;
+    });
+
     m_pageView->setActiveOverlay(-1);
-    m_findMatchIndex = -1;
-    updateFindStatusLabel();
-    if (ocrHits > 0 && firstOcrMatchPage >= 0) {
-        m_controller.setCurrentPage(firstOcrMatchPage);
-        m_statusLabel->setText(tr("Found %1 page(s) via OCR").arg(ocrHits));
-    } else {
+    
+    if (m_findMatches.empty()) {
+        m_findMatchIndex = -1;
+        updateFindStatusLabel();
         m_controller.setCurrentPage(previousPage);
         m_statusLabel->setText(tr("No matches found"));
+    } else {
+        m_findMatchIndex = 0;
+        updateFindStatusLabel();
+        applyFindMatch(m_findMatchIndex);
+        if (textHits > 0) {
+            m_statusLabel->setText(tr("Found match %1 of %2").arg(1).arg(m_findMatches.size()));
+        }
     }
 }
 

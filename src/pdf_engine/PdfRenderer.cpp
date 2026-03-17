@@ -1,4 +1,4 @@
-﻿#include "pdf_engine/PdfRenderer.h"
+#include "pdf_engine/PdfRenderer.h"
 
 #include "document/Document.h"
 #include "pdf_engine/PdfiumBridge.h"
@@ -66,6 +66,13 @@ QImage PdfRenderer::renderPage(const document::Document& document, int pageIndex
 QString PdfRenderer::cacheKey(const document::Document& document, int pageIndex, float scale) const {
     const int scaleKey = static_cast<int>(scale * 100.0f);
     return QStringLiteral("%1:%2:%3").arg(document.path()).arg(pageIndex).arg(scaleKey);
+}
+
+QString PdfRenderer::extractText(const document::Document& document, int pageIndex) const {
+    if (m_pdfium && m_pdfium->isAvailable()) {
+        return m_pdfium->extractText(document.sourceBytes(), pageIndex);
+    }
+    return {};
 }
 
 } // namespace pdf_engine

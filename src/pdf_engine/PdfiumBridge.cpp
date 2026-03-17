@@ -1,4 +1,4 @@
-﻿#include "pdf_engine/PdfiumBridge.h"
+#include "pdf_engine/PdfiumBridge.h"
 
 #include <QDir>
 
@@ -29,6 +29,11 @@ using FnBmpBuffer = void* (*)(FPDF_BITMAP);
 using FnBmpStride = int (*)(FPDF_BITMAP);
 using FnBmpFill = void (*)(FPDF_BITMAP, int, int, int, int, unsigned int);
 using FnRender = void (*)(FPDF_BITMAP, FPDF_PAGE, int, int, int, int, int, int);
+using FPDF_TEXTPAGE = void*;
+using FnTextLoadPage = FPDF_TEXTPAGE (*)(FPDF_PAGE);
+using FnTextClosePage = void (*)(FPDF_TEXTPAGE);
+using FnTextCountChars = int (*)(FPDF_TEXTPAGE);
+using FnTextGetText = int (*)(FPDF_TEXTPAGE, int, int, unsigned short*);
 
 #endif
 
@@ -51,6 +56,10 @@ struct PdfiumBridge::Impl {
     FnBmpStride bmpStride {nullptr};
     FnBmpFill bmpFill {nullptr};
     FnRender renderPageBitmap {nullptr};
+    FnTextLoadPage textLoadPage {nullptr};
+    FnTextClosePage textClosePage {nullptr};
+    FnTextCountChars textCountChars {nullptr};
+    FnTextGetText textGetText {nullptr};
 #endif
 };
 
@@ -91,11 +100,16 @@ PdfiumBridge::PdfiumBridge()
     m_impl->bmpStride = reinterpret_cast<FnBmpStride>(sym("FPDFBitmap_GetStride"));
     m_impl->bmpFill = reinterpret_cast<FnBmpFill>(sym("FPDFBitmap_FillRect"));
     m_impl->renderPageBitmap = reinterpret_cast<FnRender>(sym("FPDF_RenderPageBitmap"));
+    m_impl->textLoadPage = reinterpret_cast<FnTextLoadPage>(sym("FPDFText_LoadPage"));
+    m_impl->textClosePage = reinterpret_cast<FnTextClosePage>(sym("FPDFText_ClosePage"));
+    m_impl->textCountChars = reinterpret_cast<FnTextCountChars>(sym("FPDFText_CountChars"));
+    m_impl->textGetText = reinterpret_cast<FnTextGetText>(sym("FPDFText_GetText"));
 
     m_impl->ok = m_impl->initLib && m_impl->destroyLib && m_impl->loadMem && m_impl->closeDoc
         && m_impl->pageCount && m_impl->loadPage && m_impl->closePage && m_impl->pageW
         && m_impl->pageH && m_impl->bmpCreate && m_impl->bmpDestroy && m_impl->bmpBuffer
-        && m_impl->bmpStride && m_impl->bmpFill && m_impl->renderPageBitmap;
+        && m_impl->bmpStride && m_impl->bmpFill && m_impl->renderPageBitmap
+        && m_impl->textLoadPage && m_impl->textClosePage && m_impl->textCountChars && m_impl->textGetText;
 
     if (!m_impl->ok) {
         FreeLibrary(m_impl->dll);
@@ -191,6 +205,58 @@ QImage PdfiumBridge::renderPage(const QByteArray& pdfBytes, int pageIndex, float
     Q_UNUSED(pdfBytes)
     Q_UNUSED(pageIndex)
     Q_UNUSED(scale)
+    return {};
+#endif
+}
+
+QString PdfiumBridge::extractText(const QByteArray& pdfBytes, int pageIndex) const {
+#ifdef _WIN32
+    if (!isAvailable() || pdfBytes.isEmpty()) {
+        return {};
+    }
+
+    FPDF_DOCUMENT doc = m_impl->loadMem(pdfBytes.constData(), pdfBytes.size(), nullptr);
+    if (!doc) {
+        return {};
+    }
+
+    FPDF_PAGE page = m_impl->loadPage(doc, pageIndex);
+    if (!page) {
+        m_impl->closeDoc(doc);
+        return {};
+    }
+
+    FPDF_TEXTPAGE textPage = m_impl->textLoadPage(page);
+    if (!textPage) {
+        m_impl->closePage(page);
+        m_impl->closeDoc(doc);
+        return {};
+    }
+
+    const int charsCount = m_impl->textCountChars(textPage);
+    if (charsCount <= 0) {
+        m_impl->textClosePage(textPage);
+        m_impl->closePage(page);
+        m_impl->closeDoc(doc);
+        return {};
+    }
+
+    // Allocate buffer for UTF-16LE text (including null terminator)
+    std::vector<unsigned short> buffer(static_cast<size_t>(charsCount) + 1, 0);
+    const int readCount = m_impl->textGetText(textPage, 0, charsCount, buffer.data());
+    
+    QString extracted;
+    if (readCount > 0) {
+        extracted = QString::fromUtf16(buffer.data());
+    }
+
+    m_impl->textClosePage(textPage);
+    m_impl->closePage(page);
+    m_impl->closeDoc(doc);
+    return extracted;
+#else
+    Q_UNUSED(pdfBytes)
+    Q_UNUSED(pageIndex)
     return {};
 #endif
 }

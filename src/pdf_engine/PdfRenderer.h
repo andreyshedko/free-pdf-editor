@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "cache/PageRenderCache.h"
 
@@ -18,6 +18,7 @@ public:
 
     bool open(const document::Document& document);
     QImage renderPage(const document::Document& document, int pageIndex, float scale) const;
+    QString extractText(const document::Document& document, int pageIndex) const;
 
 private:
     [[nodiscard]] QString cacheKey(const document::Document& document, int pageIndex, float scale) const;

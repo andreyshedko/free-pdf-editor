@@ -1,5 +1,6 @@
 utils_autogen/timestamp: \
 	C:/Users/shche/free-pdf-editor/src/CMakeLists.txt \
+	C:/Users/shche/free-pdf-editor/src/resources/assets.qrc \
 	C:/Users/shche/free-pdf-editor/src/utils/FileUtils.cpp \
 	C:/Users/shche/free-pdf-editor/src/utils/FileUtils.h \
 	C:/Users/shche/free-pdf-editor/src/utils/Logger.cpp \

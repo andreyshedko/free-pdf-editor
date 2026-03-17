@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QByteArray>
 #include <QImage>
@@ -13,6 +13,8 @@ public:
     bool isAvailable() const;
     int pageCount(const QByteArray& pdfBytes) const;
     QImage renderPage(const QByteArray& pdfBytes, int pageIndex, float scale) const;
+    QString extractText(const QByteArray& pdfBytes, int pageIndex) const;
+    std::vector<QRectF> findTextRects(const QByteArray& pdfBytes, int pageIndex, const QString& needle) const;
 
 private:
     struct Impl;

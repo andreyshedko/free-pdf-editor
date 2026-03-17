@@ -1,0 +1,248 @@
+[
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/overlay.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\overlay.dir\\overlay_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\overlay_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/overlay_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/overlay.dir/overlay_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/overlay.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\overlay.dir\\overlay\\AnnotationObject.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\overlay\\AnnotationObject.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/overlay/AnnotationObject.cpp",
+  "output": "src/CMakeFiles/overlay.dir/overlay/AnnotationObject.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/overlay.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\overlay.dir\\overlay\\TextEditObject.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\overlay\\TextEditObject.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/overlay/TextEditObject.cpp",
+  "output": "src/CMakeFiles/overlay.dir/overlay/TextEditObject.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/overlay.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\overlay.dir\\overlay\\ImageObject.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\overlay\\ImageObject.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/overlay/ImageObject.cpp",
+  "output": "src/CMakeFiles/overlay.dir/overlay/ImageObject.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/overlay.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\overlay.dir\\overlay\\ShapeObject.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\overlay\\ShapeObject.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/overlay/ShapeObject.cpp",
+  "output": "src/CMakeFiles/overlay.dir/overlay/ShapeObject.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/document.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\document.dir\\document_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\document_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/document_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/document.dir/document_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/document.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\document.dir\\document\\PageModel.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\document\\PageModel.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/document/PageModel.cpp",
+  "output": "src/CMakeFiles/document.dir/document/PageModel.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/document.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\document.dir\\document\\Document.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\document\\Document.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/document/Document.cpp",
+  "output": "src/CMakeFiles/document.dir/document/Document.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/cache.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\cache.dir\\cache_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\cache_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/cache_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/cache.dir/cache_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/cache.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\cache.dir\\cache\\PageRenderCache.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\cache\\PageRenderCache.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/cache/PageRenderCache.cpp",
+  "output": "src/CMakeFiles/cache.dir/cache/PageRenderCache.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf_engine.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf_engine.dir\\pdf_engine_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\pdf_engine_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/pdf_engine_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/pdf_engine.dir/pdf_engine_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf_engine.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf_engine.dir\\pdf_engine\\PdfiumBridge.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\pdf_engine\\PdfiumBridge.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfiumBridge.cpp",
+  "output": "src/CMakeFiles/pdf_engine.dir/pdf_engine/PdfiumBridge.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf_engine.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf_engine.dir\\pdf_engine\\PdfRenderer.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\pdf_engine\\PdfRenderer.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfRenderer.cpp",
+  "output": "src/CMakeFiles/pdf_engine.dir/pdf_engine/PdfRenderer.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf_engine.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf_engine.dir\\pdf_engine\\PdfWriter.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\pdf_engine\\PdfWriter.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfWriter.cpp",
+  "output": "src/CMakeFiles/pdf_engine.dir/pdf_engine/PdfWriter.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ocr.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ocr.dir\\ocr_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\ocr_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/ocr_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/ocr.dir/ocr_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ocr.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ocr.dir\\ocr\\OCRProcessor.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\ocr\\OCRProcessor.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/ocr/OCRProcessor.cpp",
+  "output": "src/CMakeFiles/ocr.dir/ocr/OCRProcessor.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/utils.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\utils.dir\\utils_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\utils_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/utils_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/utils.dir/utils_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/utils.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\utils.dir\\utils\\Logger.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\utils\\Logger.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/utils/Logger.cpp",
+  "output": "src/CMakeFiles/utils.dir/utils/Logger.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/utils.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\utils.dir\\utils\\FileUtils.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\utils\\FileUtils.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/utils/FileUtils.cpp",
+  "output": "src/CMakeFiles/utils.dir/utils/FileUtils.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\editor_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/editor_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\UndoStack.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\UndoStack.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/UndoStack.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/UndoStack.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\SelectionManager.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\SelectionManager.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/SelectionManager.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/SelectionManager.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\EditorController.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\EditorController.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/EditorController.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/EditorController.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\commands\\AddAnnotationCommand.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\commands\\AddAnnotationCommand.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/commands/AddAnnotationCommand.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/commands/AddAnnotationCommand.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\commands\\AddTextEditCommand.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\commands\\AddTextEditCommand.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/commands/AddTextEditCommand.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/commands/AddTextEditCommand.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\commands\\DeletePageCommand.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\commands\\DeletePageCommand.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/commands/DeletePageCommand.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/commands/DeletePageCommand.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\commands\\InsertImageCommand.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\commands\\InsertImageCommand.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/commands/InsertImageCommand.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/commands/InsertImageCommand.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\commands\\MoveObjectCommand.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\commands\\MoveObjectCommand.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/commands/MoveObjectCommand.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/commands/MoveObjectCommand.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\editor.dir\\editor\\commands\\ReplaceTextCommand.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\editor\\commands\\ReplaceTextCommand.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/editor/commands/ReplaceTextCommand.cpp",
+  "output": "src/CMakeFiles/editor.dir/editor/commands/ReplaceTextCommand.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ui.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ui.dir\\ui_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\ui_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/ui_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/ui.dir/ui_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ui.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ui.dir\\ui\\Toolbar.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\ui\\Toolbar.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/ui/Toolbar.cpp",
+  "output": "src/CMakeFiles/ui.dir/ui/Toolbar.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ui.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ui.dir\\ui\\ThumbnailPanel.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\ui\\ThumbnailPanel.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/ui/ThumbnailPanel.cpp",
+  "output": "src/CMakeFiles/ui.dir/ui/ThumbnailPanel.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ui.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ui.dir\\ui\\InspectorPanel.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\ui\\InspectorPanel.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/ui/InspectorPanel.cpp",
+  "output": "src/CMakeFiles/ui.dir/ui/InspectorPanel.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ui.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ui.dir\\ui\\PageView.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\ui\\PageView.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/ui/PageView.cpp",
+  "output": "src/CMakeFiles/ui.dir/ui/PageView.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/ui.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\ui.dir\\ui\\MainWindow.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\ui\\MainWindow.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/ui/MainWindow.cpp",
+  "output": "src/CMakeFiles/ui.dir/ui/MainWindow.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/app.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\app.dir\\app_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\app_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/app_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/app.dir/app_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/app.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\app.dir\\app\\Application.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\app\\Application.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/app/Application.cpp",
+  "output": "src/CMakeFiles/app.dir/app/Application.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf-editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf-editor.dir\\pdf-editor_autogen\\mocs_compilation.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\pdf-editor_autogen\\mocs_compilation.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/pdf-editor_autogen/mocs_compilation.cpp",
+  "output": "src/CMakeFiles/pdf-editor.dir/pdf-editor_autogen/mocs_compilation.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf-editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf-editor.dir\\app\\main.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\src\\app\\main.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/src/app/main.cpp",
+  "output": "src/CMakeFiles/pdf-editor.dir/app/main.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf-editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf-editor.dir\\__\\.qt\\rcc\\qrc_pdf-editor_translations.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\.qt\\rcc\\qrc_pdf-editor_translations.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/.qt/rcc/qrc_pdf-editor_translations.cpp",
+  "output": "src/CMakeFiles/pdf-editor.dir/__/.qt/rcc/qrc_pdf-editor_translations.cpp.obj"
+},
+{
+  "directory": "C:/Users/shche/free-pdf-editor/build_mingw/src",
+  "command": "C:\\Qt\\Tools\\mingw1310_64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 @CMakeFiles/pdf-editor.dir/includes_CXX.rsp -g -std=gnu++20 -o CMakeFiles\\pdf-editor.dir\\pdf-editor_autogen\\3YJK5W5UP7\\qrc_assets.cpp.obj -c C:\\Users\\shche\\free-pdf-editor\\build_mingw\\src\\pdf-editor_autogen\\3YJK5W5UP7\\qrc_assets.cpp",
+  "file": "C:/Users/shche/free-pdf-editor/build_mingw/src/pdf-editor_autogen/3YJK5W5UP7/qrc_assets.cpp",
+  "output": "src/CMakeFiles/pdf-editor.dir/pdf-editor_autogen/3YJK5W5UP7/qrc_assets.cpp.obj"
+}
+]

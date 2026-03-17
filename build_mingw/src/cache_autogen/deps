@@ -2,4 +2,5 @@ cache_autogen/timestamp: \
 	C:/Users/shche/free-pdf-editor/src/CMakeLists.txt \
 	C:/Users/shche/free-pdf-editor/src/cache/PageRenderCache.cpp \
 	C:/Users/shche/free-pdf-editor/src/cache/PageRenderCache.h \
+	C:/Users/shche/free-pdf-editor/src/resources/assets.qrc \
 	C:/Program\ Files/CMake/bin/cmake.exe

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "document/Document.h"
 #include "editor/SelectionManager.h"
@@ -34,6 +34,7 @@ public:
     bool moveSelectedBy(const QPointF& delta);
     bool selectLastOverlay();
     QString runOcrOnCurrentPage();
+    QString extractPageText(int pageIndex) const;
 
     void undo();
     void redo();

@@ -459,6 +459,7 @@ ui_autogen/timestamp: \
 	C:/Users/shche/free-pdf-editor/src/overlay/OverlayObject.h \
 	C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfRenderer.h \
 	C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfWriter.h \
+	C:/Users/shche/free-pdf-editor/src/resources/assets.qrc \
 	C:/Users/shche/free-pdf-editor/src/ui/InspectorPanel.cpp \
 	C:/Users/shche/free-pdf-editor/src/ui/InspectorPanel.h \
 	C:/Users/shche/free-pdf-editor/src/ui/MainWindow.cpp \

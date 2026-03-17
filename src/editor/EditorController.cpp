@@ -1,4 +1,4 @@
-﻿#include "editor/EditorController.h"
+#include "editor/EditorController.h"
 
 #include "editor/commands/AddAnnotationCommand.h"
 #include "editor/commands/AddTextEditCommand.h"
@@ -256,6 +256,13 @@ QString EditorController::runOcrOnCurrentPage() {
 
     emit statusChanged(QStringLiteral("OCR done"));
     return text;
+}
+
+QString EditorController::extractPageText(int pageIndex) const {
+    if (!m_document.isOpen()) {
+        return {};
+    }
+    return m_renderer.extractText(m_document, pageIndex);
 }
 
 void EditorController::undo() {

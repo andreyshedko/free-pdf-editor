@@ -9,4 +9,5 @@ overlay_autogen/timestamp: \
 	C:/Users/shche/free-pdf-editor/src/overlay/ShapeObject.h \
 	C:/Users/shche/free-pdf-editor/src/overlay/TextEditObject.cpp \
 	C:/Users/shche/free-pdf-editor/src/overlay/TextEditObject.h \
+	C:/Users/shche/free-pdf-editor/src/resources/assets.qrc \
 	C:/Program\ Files/CMake/bin/cmake.exe

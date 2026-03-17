@@ -6,4 +6,5 @@ pdf_engine_autogen/timestamp: \
 	C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfWriter.h \
 	C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfiumBridge.cpp \
 	C:/Users/shche/free-pdf-editor/src/pdf_engine/PdfiumBridge.h \
+	C:/Users/shche/free-pdf-editor/src/resources/assets.qrc \
 	C:/Program\ Files/CMake/bin/cmake.exe
